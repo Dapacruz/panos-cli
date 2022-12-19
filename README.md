@@ -1,4 +1,4 @@
-## pan-pingable-hosts
+## panos-cli
 *A utility for working with Palo Alto Networks Panorama and firewalls*
 </br>
 </br>
