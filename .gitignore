@@ -1,0 +1,4 @@
+compiled-binaries
+panos-cli
+*.txt
+.DS_Store
