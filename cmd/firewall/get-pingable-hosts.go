@@ -44,7 +44,7 @@ type Interface struct {
 
 // getPingableHostsCmd represents the getPingableHosts command
 var getPingableHostsCmd = &cobra.Command{
-	Use:   "get-pingable-hosts [flags] <firewall>",
+	Use:   "pingable-hosts [flags] <firewall>",
 	Short: "Collects pingable IP addresses from a firewall ARP cache",
 	Long: `Collects pingable IP addresses from a firewall ARP cache
 
@@ -132,7 +132,7 @@ Examples:
 }
 
 func init() {
-	firewallCmd.AddCommand(getPingableHostsCmd)
+	getCmd.AddCommand(getPingableHostsCmd)
 
 	getPingableHostsCmd.Flags().StringVarP(&Config.User, "user", "u", Config.User, "PAN User")
 	getPingableHostsCmd.Flags().StringVarP(&Config.Password, "password", "p", Config.Password, "Password for PAN user")
