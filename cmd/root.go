@@ -27,9 +27,10 @@ type config struct {
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "panos-cli",
-	Short: "A utility for working with Palo Alto Networks Panorama and firewalls",
-	Long:  "",
+	Use:     "panos-cli",
+	Version: "0.1.1",
+	Short:   "A utility for working with Palo Alto Networks Panorama and firewalls",
+	Long:    "",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
