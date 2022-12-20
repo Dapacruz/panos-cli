@@ -1,4 +1,4 @@
-package cmd
+package firewall
 
 import (
 	"bytes"
@@ -28,8 +28,10 @@ var (
 )
 
 // Create objects to colorize stdout
-var green *color.Color = color.New(color.FgGreen)
-var red *color.Color = color.New(color.FgRed)
+var (
+	green *color.Color = color.New(color.FgGreen)
+	red   *color.Color = color.New(color.FgRed)
+)
 
 type ArpCache struct {
 	Entries []Interface `xml:"result>entries>entry"`
@@ -132,8 +134,8 @@ Examples:
 func init() {
 	firewallCmd.AddCommand(getPingableHostsCmd)
 
-	getPingableHostsCmd.Flags().StringVarP(&Config.User, "user", "u", "", "PAN User")
-	getPingableHostsCmd.Flags().StringVarP(&Config.Password, "password", "p", "", "Password for PAN user")
+	getPingableHostsCmd.Flags().StringVarP(&Config.User, "user", "u", Config.User, "PAN User")
+	getPingableHostsCmd.Flags().StringVarP(&Config.Password, "password", "p", Config.Password, "Password for PAN user")
 	getPingableHostsCmd.Flags().IntVarP(&NumAddresses, "", "n", 2, "Number of addresses per interface")
 	getPingableHostsCmd.Flags().IntVarP(&Timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
 }

@@ -1,13 +1,13 @@
-package cmd
+package globalProtect
 
 import (
 	"github.com/spf13/cobra"
 )
 
 // globalProtectCmd represents the globalProtect command
-var globalProtectCmd = &cobra.Command{
-	Use:   "global-protect",
-	Short: "A set of commands for working with GlobalProtect",
+var getCmd = &cobra.Command{
+	Use:   "get",
+	Short: "Get GlobalProtect information",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -15,5 +15,5 @@ var globalProtectCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(globalProtectCmd)
+	globalProtectCmd.AddCommand(getCmd)
 }

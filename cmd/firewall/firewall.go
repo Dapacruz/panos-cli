@@ -1,8 +1,11 @@
-package cmd
+package firewall
 
 import (
+	"github.com/Dapacruz/panos-cli/cmd"
 	"github.com/spf13/cobra"
 )
+
+var Config = &cmd.Config
 
 // firewallCmd represents the firewall command
 var firewallCmd = &cobra.Command{
@@ -15,5 +18,5 @@ var firewallCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(firewallCmd)
+	cmd.RootCmd.AddCommand(firewallCmd)
 }

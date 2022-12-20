@@ -1,4 +1,4 @@
-package cmd
+package globalProtect
 
 import (
 	"crypto/tls"
@@ -42,7 +42,7 @@ type gatewayUser struct {
 
 // getUsersCmd represents the getUsers command
 var getUsersCmd = &cobra.Command{
-	Use:   "get-users",
+	Use:   "users",
 	Short: "Get connected users from all gateways",
 	Long: `Get connected users from all gateways
 
@@ -54,7 +54,7 @@ Examples:
 		fmt.Fprintln(os.Stderr)
 		if Config.User == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
-			fmt.Scanln(&Config.User)
+			fmt.Scanln(Config.User)
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
@@ -118,10 +118,10 @@ Examples:
 }
 
 func init() {
-	globalProtectCmd.AddCommand(getUsersCmd)
+	getCmd.AddCommand(getUsersCmd)
 
-	getUsersCmd.Flags().StringVarP(&Config.User, "user", "u", "", "PAN User")
-	getUsersCmd.Flags().StringVarP(&Config.Password, "password", "p", "", "Password for PAN user")
+	getUsersCmd.Flags().StringVarP(&Config.User, "user", "u", Config.User, "PAN User")
+	getUsersCmd.Flags().StringVarP(&Config.Password, "password", "p", Config.Password, "Password for PAN user")
 }
 
 func queryGateway(fw, user, pw string) gatewayUsers {
