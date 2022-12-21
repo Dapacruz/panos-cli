@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	ViperConfigName string = ".panos-cli"
-	ViperConfigPath string = "$HOME"
+	VIPER_CONFIG_NAME string = ".panos-cli"
+	VIPER_CONFIG_PATH string = "$HOME"
 )
 
 var Config config
@@ -43,8 +43,8 @@ func Execute() {
 }
 
 func init() {
-	viper.SetConfigName(ViperConfigName)
-	viper.AddConfigPath(ViperConfigPath)
+	viper.SetConfigName(VIPER_CONFIG_NAME)
+	viper.AddConfigPath(VIPER_CONFIG_PATH)
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
