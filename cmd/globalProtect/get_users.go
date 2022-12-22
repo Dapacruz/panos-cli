@@ -19,7 +19,13 @@ import (
 	"golang.org/x/term"
 )
 
-var wg sync.WaitGroup
+var (
+	wg            sync.WaitGroup
+	gateways      []string
+	user          string
+	password      string
+	connectedUser string
+)
 
 type haState struct {
 	Enabled string `xml:"result>enabled"`
@@ -52,29 +58,36 @@ Examples:
   > panos-cli global-protect get-users -u user
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		// If no gateways are set in the config file or by flag, exit
-		if len(Config.GlobalProtect.Gateways) == 0 {
+		// fmt.Println(connectedUser)
+		// os.Exit(0)
+
+		// If no gateways are set by flag or config file, exit
+		if len(gateways) == 0 && len(Config.GlobalProtect.Gateways) == 0 {
 			cmd.Help()
 			fmt.Fprintf(os.Stderr, "\n\nNo GlobalProtect Gateways found in config file %v. Update config file or use the --gateways flag.\n", viper.ConfigFileUsed())
 			os.Exit(1)
+		} else if len(gateways) == 0 {
+			gateways = Config.GlobalProtect.Gateways
 		}
 
 		// If the apikey and user is not set, prompt for user
 		fmt.Fprintln(os.Stderr)
-		if Config.ApiKey == "" && Config.User == "" {
+		if Config.ApiKey == "" && Config.User == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
-			fmt.Scanln(&Config.User)
+			fmt.Scanln(&user)
+		} else if user == "" {
+			user = Config.User
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
-		Config.UserFlagSet = cmd.Flags().Changed("user")
-		if Config.UserFlagSet || (Config.Password == "" && Config.ApiKey == "") {
-			fmt.Fprintf(os.Stderr, "Password (%s): ", Config.User)
+		userFlagSet := cmd.Flags().Changed("user")
+		if userFlagSet || (Config.ApiKey == "" && password == "") {
+			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(syscall.Stdin))
 			if err != nil {
 				panic(err)
 			}
-			Config.Password = string(bytepw)
+			password = string(bytepw)
 			fmt.Fprintf(os.Stderr, "\n\n")
 		}
 
@@ -82,9 +95,9 @@ Examples:
 
 		// Get active users
 		queue := make(chan gatewayUsers, 100)
-		for _, gw := range Config.GlobalProtect.Gateways {
+		for _, gw := range gateways {
 			wg.Add(1)
-			go getActiveUsers(gw, Config.User, Config.Password, queue)
+			go getActiveUsers(gw, user, password, queue, userFlagSet)
 		}
 		wg.Wait()
 		close(queue)
@@ -129,12 +142,13 @@ Examples:
 func init() {
 	getCmd.AddCommand(getUsersCmd)
 
-	getUsersCmd.Flags().StringSliceVarP(&Config.GlobalProtect.Gateways, "gateways", "g", Config.GlobalProtect.Gateways, "GlobalProtect Gateways (comma separated)")
-	getUsersCmd.Flags().StringVarP(&Config.User, "user", "u", Config.User, "PAN User")
-	getUsersCmd.Flags().StringVarP(&Config.Password, "password", "p", Config.Password, "Password for PAN user")
+	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect Gateways (comma separated)")
+	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
+	getUsersCmd.Flags().StringVarP(&password, "password", "p", password, "Password for PAN user")
+	getUsersCmd.Flags().StringVarP(&connectedUser, "connected-user", "c", connectedUser, "Get connected user")
 }
 
-func queryGateway(fw, user, pw string) gatewayUsers {
+func queryGateway(fw, user, pw string, userFlagSet bool) gatewayUsers {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -149,7 +163,7 @@ func queryGateway(fw, user, pw string) gatewayUsers {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><global-protect-gateway><current-user></current-user></global-protect-gateway></show>")
-	if !Config.UserFlagSet && Config.ApiKey != "" {
+	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, pw)
@@ -187,7 +201,7 @@ func queryGateway(fw, user, pw string) gatewayUsers {
 	return activeUsers
 }
 
-func gatewayActive(gw, user, pw string) bool {
+func gatewayActive(gw, user, pw string, userFlagSet bool) bool {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -202,7 +216,7 @@ func gatewayActive(gw, user, pw string) bool {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><high-availability><state></state></high-availability></show>")
-	if !Config.UserFlagSet && Config.ApiKey != "" {
+	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, pw)
@@ -240,9 +254,9 @@ func gatewayActive(gw, user, pw string) bool {
 	return false
 }
 
-func getActiveUsers(gw, user, pw string, queue chan<- gatewayUsers) {
+func getActiveUsers(gw, user, pw string, queue chan<- gatewayUsers, userFlagSet bool) {
 	defer wg.Done()
-	if gatewayActive(gw, user, pw) {
-		queue <- queryGateway(gw, user, pw)
+	if gatewayActive(gw, user, pw, userFlagSet) {
+		queue <- queryGateway(gw, user, pw, userFlagSet)
 	}
 }
