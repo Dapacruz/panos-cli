@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -44,12 +47,14 @@ func Execute() {
 
 func init() {
 	viper.SetConfigName(VIPER_CONFIG_NAME)
+	viper.SetConfigType("yml")
 	viper.AddConfigPath(VIPER_CONFIG_PATH)
-	viper.AutomaticEnv()
+	// viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Config file not found; ignore error
+			// Config file not found
+			initalizeConfig()
 		} else {
 			panic(fmt.Errorf("fatal error config file: %w", err))
 		}
@@ -59,4 +64,65 @@ func init() {
 			panic(fmt.Errorf("unable to decode into struct, %v", err))
 		}
 	}
+}
+
+func initalizeConfig() {
+	fmt.Printf("Initializing configuration file...\n\n")
+
+	// Initialize the default config
+	var baseConfig = `
+apikey: ""
+user: ""
+global-protect:
+  gateways: []
+`
+	err := viper.ReadConfig(bytes.NewBuffer([]byte(baseConfig)))
+	if err != nil {
+		panic(fmt.Errorf("fatal error config file: %w", err))
+	}
+
+	// Get the API key from stdin
+	var apikey string
+	fmt.Fprint(os.Stderr, "API Key: ")
+	fmt.Scanln(&apikey)
+	// Add to the config
+	viper.Set("apikey", apikey)
+
+	// Get the default user from stdin
+	var user string
+	fmt.Fprint(os.Stderr, "Default PAN User: ")
+	fmt.Scanln(&user)
+	// Add to the config
+	viper.Set("user", user)
+
+	// Get the IP/hostname of all GlobalProtect gateways from stdin
+	fmt.Printf("Enter IP/Hostname of all GlobalProtect gateways (space separated): ")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	gateways := strings.Split(scanner.Text(), " ")
+	// Add to the config
+	viper.Set("global-protect.gateways", gateways)
+
+	// Save the new config file
+	err = viper.SafeWriteConfig()
+	if err != nil {
+		panic(fmt.Errorf("unable to write config file, %v", err))
+	}
+
+	// Read in the new config file
+	err = viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("fatal error config file: %w", err))
+	}
+
+	// Populate the conrfig struct with the contents of the new config file
+	err = viper.Unmarshal(&Config)
+	if err != nil {
+		panic(fmt.Errorf("unable to decode into struct, %v", err))
+	}
+
+	fmt.Printf("\n\nInitialization complete.\n\n")
+	fmt.Printf("Configuration file saved to %v\n\n", viper.ConfigFileUsed())
+
+	os.Exit(0)
 }
