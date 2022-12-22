@@ -23,8 +23,10 @@ import (
 )
 
 var (
-	NumAddresses int
-	Timeout      int
+	user         string
+	password     string
+	numAddresses int
+	timeout      int
 )
 
 // Create objects to colorize stdout
@@ -65,27 +67,29 @@ Examples:
 		}
 
 		fmt.Fprintln(os.Stderr)
-		if Config.User == "" {
+		if Config.User == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
-			fmt.Scanln(&Config.User)
+			fmt.Scanln(&user)
+		} else if user == "" {
+			user = Config.User
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
-		Config.UserFlagSet = cmd.Flags().Changed("user")
-		if Config.UserFlagSet || (Config.Password == "" && Config.ApiKey == "") {
-			fmt.Fprintf(os.Stderr, "Password (%s): ", Config.User)
+		userFlagSet := cmd.Flags().Changed("user")
+		if userFlagSet || (Config.ApiKey == "" && password == "") {
+			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(syscall.Stdin))
 			if err != nil {
 				panic(err)
 			}
-			Config.Password = string(bytepw)
+			password = string(bytepw)
 			fmt.Fprintf(os.Stderr, "\n\n")
 		}
 
 		start := time.Now()
 
 		fmt.Fprintf(os.Stderr, "Downloading ARP cache from %v ... ", firewall)
-		data := getArpCache(firewall, Config.User, Config.Password)
+		data := getArpCache(firewall, user, password, userFlagSet)
 		var arpCache ArpCache
 		err := xml.Unmarshal([]byte(data), &arpCache)
 		if err != nil {
@@ -106,7 +110,7 @@ Examples:
 		// Harvest pingable addresses from each interface
 		var pingableHosts []string
 		for _, addrs := range interfaces {
-			pingableHosts = append(pingableHosts, getPingableAddresses(addrs, NumAddresses, Timeout)...)
+			pingableHosts = append(pingableHosts, getPingableAddresses(addrs, numAddresses, timeout)...)
 		}
 		green.Fprintf(os.Stderr, "success\n\n")
 
@@ -134,10 +138,10 @@ Examples:
 func init() {
 	getCmd.AddCommand(getPingableHostsCmd)
 
-	getPingableHostsCmd.Flags().StringVarP(&Config.User, "user", "u", Config.User, "PAN User")
-	getPingableHostsCmd.Flags().StringVarP(&Config.Password, "password", "p", Config.Password, "Password for PAN user")
-	getPingableHostsCmd.Flags().IntVarP(&NumAddresses, "", "n", 2, "Number of addresses per interface")
-	getPingableHostsCmd.Flags().IntVarP(&Timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
+	getPingableHostsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
+	getPingableHostsCmd.Flags().StringVarP(&password, "password", "p", password, "Password for PAN user")
+	getPingableHostsCmd.Flags().IntVarP(&numAddresses, "", "n", 2, "Number of addresses per interface")
+	getPingableHostsCmd.Flags().IntVarP(&timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
 }
 
 func getPingableAddresses(addrs []string, numAddrs, timeout int) []string {
@@ -186,7 +190,7 @@ func pingAddr(addr string, timeout int) *ping.Statistics {
 	return stats
 }
 
-func getArpCache(fw, user, pw string) string {
+func getArpCache(fw, user, pw string, userFlagSet bool) string {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -202,7 +206,7 @@ func getArpCache(fw, user, pw string) string {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><arp><entry name = 'all'/></arp></show>")
-	if !Config.UserFlagSet && Config.ApiKey != "" {
+	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, pw)

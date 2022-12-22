@@ -58,9 +58,6 @@ Examples:
   > panos-cli global-protect get-users -u user
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		// fmt.Println(connectedUser)
-		// os.Exit(0)
-
 		// If no gateways are set by flag or config file, exit
 		if len(gateways) == 0 && len(Config.GlobalProtect.Gateways) == 0 {
 			cmd.Help()

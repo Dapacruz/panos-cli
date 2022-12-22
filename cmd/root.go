@@ -23,7 +23,6 @@ type config struct {
 	ApiKey        string `mapstructure:"apikey"`
 	User          string `mapstructure:"user"`
 	Password      string
-	UserFlagSet   bool
 	GlobalProtect struct {
 		Gateways []string `mapstructure:"gateways"`
 	} `mapstructure:"global-protect"`
