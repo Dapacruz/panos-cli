@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -51,10 +52,18 @@ Examples:
   > panos-cli global-protect get-users -u user
 `,
 	Run: func(cmd *cobra.Command, args []string) {
+		// If no gateways are set in the config file or by flag, exit
+		if len(Config.GlobalProtect.Gateways) == 0 {
+			cmd.Help()
+			fmt.Fprintf(os.Stderr, "\n\nNo GlobalProtect Gateways found in config file %v. Update config file or use the --gateways flag.\n", viper.ConfigFileUsed())
+			os.Exit(1)
+		}
+
+		// If the apikey and user is not set, prompt for user
 		fmt.Fprintln(os.Stderr)
-		if Config.User == "" {
+		if Config.ApiKey == "" && Config.User == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
-			fmt.Scanln(Config.User)
+			fmt.Scanln(&Config.User)
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
@@ -120,6 +129,7 @@ Examples:
 func init() {
 	getCmd.AddCommand(getUsersCmd)
 
+	getUsersCmd.Flags().StringSliceVarP(&Config.GlobalProtect.Gateways, "gateways", "g", Config.GlobalProtect.Gateways, "GlobalProtect Gateways (comma separated)")
 	getUsersCmd.Flags().StringVarP(&Config.User, "user", "u", Config.User, "PAN User")
 	getUsersCmd.Flags().StringVarP(&Config.Password, "password", "p", Config.Password, "Password for PAN user")
 }

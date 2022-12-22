@@ -96,10 +96,17 @@ global-protect:
 	viper.Set("user", user)
 
 	// Get the IP/hostname of all GlobalProtect gateways from stdin
-	fmt.Printf("Enter IP/Hostname of all GlobalProtect gateways (space separated): ")
+	fmt.Printf("Enter IP/Hostname of all GlobalProtect gateways (comma separated): ")
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
-	gateways := strings.Split(scanner.Text(), " ")
+	// Convert the comma separated string to a space separated string
+	gatewayInput := strings.ReplaceAll(scanner.Text(), ",", " ")
+	// Split the string into a slice
+	gateways := strings.Fields(gatewayInput)
+	// Remove empty string if it exists
+	if gateways[0] == "" {
+		gateways = []string{}
+	}
 	// Add to the config
 	viper.Set("global-protect.gateways", gateways)
 
