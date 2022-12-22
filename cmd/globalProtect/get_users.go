@@ -90,30 +90,23 @@ Examples:
 
 		start := time.Now()
 
-		// Get active users
-		queue := make(chan gatewayUsers, 100)
-		for _, gw := range gateways {
-			wg.Add(1)
-			go getActiveUsers(gw, user, password, queue, userFlagSet)
-		}
-		wg.Wait()
-		close(queue)
+		ch := make(chan gatewayUsers, 100)
+		doneCh := make(chan struct{})
 
-		// Print active users
 		userCount := map[string]int{}
 		activeUserFlagSet := cmd.Flags().Changed("active-user")
-		for users := range queue {
-			for _, user := range users.Entries {
-				// Print user
-				if activeUserFlagSet && activeUser == user.Username {
-					fmt.Printf("%+v\n", *user)
-				} else if !activeUserFlagSet {
-					fmt.Printf("%+v\n", *user)
-				}
-				userCount[user.Gateway] += 1
-				userCount["total"] += 1
-			}
+		go printResults(ch, doneCh, userCount, activeUserFlagSet)
+
+		fmt.Printf("Getting active users...\n\n")
+
+		// Get active users
+		for _, gw := range gateways {
+			wg.Add(1)
+			go getActiveUsers(gw, user, password, ch, userFlagSet)
 		}
+		wg.Wait()
+		close(ch)
+		<-doneCh
 
 		// Sort userCount slice
 		keys := make([]string, 0, len(userCount))
@@ -149,6 +142,26 @@ func init() {
 	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
 	getUsersCmd.Flags().StringVarP(&password, "password", "p", password, "Password for PAN user")
 	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "Get active user")
+}
+
+func printResults(ch <-chan gatewayUsers, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {
+	// Print active users
+	for users := range ch {
+		for _, user := range users.Entries {
+			// Print user
+			if activeUserFlagSet {
+				if activeUser == user.Username {
+					fmt.Printf("%+v\n", *user)
+				}
+			} else {
+				fmt.Printf("%+v\n", *user)
+			}
+			userCount[user.Gateway] += 1
+			userCount["total"] += 1
+		}
+	}
+
+	doneCh <- struct{}{}
 }
 
 func queryGateway(fw, user, pw string, userFlagSet bool) gatewayUsers {
