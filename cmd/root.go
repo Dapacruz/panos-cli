@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	VERSION           string = "0.2.0"
 	VIPER_CONFIG_NAME string = ".panos-cli"
 	VIPER_CONFIG_PATH string = "$HOME"
 )
@@ -31,7 +32,7 @@ type config struct {
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:     "panos-cli",
-	Version: "0.1.2",
+	Version: VERSION,
 	Short:   "A utility for working with Palo Alto Networks Panorama and firewalls",
 	Long:    "",
 }
