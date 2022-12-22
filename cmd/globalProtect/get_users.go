@@ -54,8 +54,8 @@ var getUsersCmd = &cobra.Command{
 	Long: `Get active users from all gateways
 
 Examples:
-  > panos-cli global-protect get-users
-  > panos-cli global-protect get-users -u user
+  > panos-cli global-protect get users
+  > panos-cli global-protect get users -u user
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no gateways are set by flag or config file, exit
@@ -140,7 +140,7 @@ func init() {
 
 	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect Gateways (comma separated)")
 	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
-	getUsersCmd.Flags().StringVarP(&password, "password", "p", password, "Password for PAN user")
+	getUsersCmd.Flags().StringVar(&password, "password", password, "Password for PAN user")
 	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "Get active user")
 }
 

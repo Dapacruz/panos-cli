@@ -1,4 +1,4 @@
-package firewall
+package panorama
 
 import (
 	"github.com/spf13/cobra"
@@ -7,7 +7,7 @@ import (
 // getCmd represents the get command
 var getCmd = &cobra.Command{
 	Use:   "get",
-	Short: "Get GlobalProtect information",
+	Short: "Get Panorama information",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -15,5 +15,5 @@ var getCmd = &cobra.Command{
 }
 
 func init() {
-	firewallCmd.AddCommand(getCmd)
+	panoramaCmd.AddCommand(getCmd)
 }

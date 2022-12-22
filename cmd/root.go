@@ -26,6 +26,7 @@ type config struct {
 	GlobalProtect struct {
 		Gateways []string `mapstructure:"gateways"`
 	} `mapstructure:"global-protect"`
+	Panorama string `mapstructure:"panorama"`
 }
 
 // RootCmd represents the base command when called without any subcommands
@@ -109,6 +110,13 @@ global-protect:
 	}
 	// Add to the config
 	viper.Set("global-protect.gateways", gateways)
+
+	// Get the API key from stdin
+	var panorama string
+	fmt.Fprint(os.Stderr, "Panorama IP/Hostname: ")
+	fmt.Scanln(&panorama)
+	// Add to the config
+	viper.Set("panorama", panorama)
 
 	// Save the new config file
 	err = viper.SafeWriteConfig()

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// globalProtectCmd represents the globalProtect command
+// getCmd represents the get command
 var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get GlobalProtect information",

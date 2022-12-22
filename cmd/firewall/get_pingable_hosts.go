@@ -51,9 +51,9 @@ var getPingableHostsCmd = &cobra.Command{
 	Long: `Collects pingable IP addresses from a firewall ARP cache
 
 Examples:
-  > panos-cli firewall get-pingable-hosts fw01.domain.com
-  > panos-cli firewall get-pingable-hosts -u user panwfw01.corp.com
-  > panos-cli firewall get-pingable-hosts -u user -n 4 panwfw01.corp.com`,
+  > panos-cli firewall get pingable-hosts fw01.domain.com
+  > panos-cli firewall get pingable-hosts -u user panwfw01.corp.com
+  > panos-cli firewall get pingable-hosts -u user -n 4 panwfw01.corp.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var firewall string
 
@@ -139,7 +139,7 @@ func init() {
 	getCmd.AddCommand(getPingableHostsCmd)
 
 	getPingableHostsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
-	getPingableHostsCmd.Flags().StringVarP(&password, "password", "p", password, "Password for PAN user")
+	getPingableHostsCmd.Flags().StringVar(&password, "password", password, "Password for PAN user")
 	getPingableHostsCmd.Flags().IntVarP(&numAddresses, "", "n", 2, "Number of addresses per interface")
 	getPingableHostsCmd.Flags().IntVarP(&timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
 }
