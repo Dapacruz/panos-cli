@@ -122,6 +122,9 @@ global-protect:
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
+	// Set the permissions on the config file
+	os.Chmod(viper.ConfigFileUsed(), 0600)
+
 	// Populate the conrfig struct with the contents of the new config file
 	err = viper.Unmarshal(&Config)
 	if err != nil {
@@ -129,7 +132,7 @@ global-protect:
 	}
 
 	fmt.Printf("\n\nInitialization complete.\n\n")
-	fmt.Printf("Configuration file saved to %v\n\n", viper.ConfigFileUsed())
+	fmt.Printf("Configuration file saved to %v.\n\n", viper.ConfigFileUsed())
 
 	os.Exit(0)
 }
