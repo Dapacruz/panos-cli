@@ -32,11 +32,11 @@ type haState struct {
 	State   string `xml:"result>group>local-info>state"`
 }
 
-type gatewayUsers struct {
-	Entries []*gatewayUser `xml:"result>entry"`
+type userSlice struct {
+	Users []*connectedUser `xml:"result>entry"`
 }
 
-type gatewayUser struct {
+type connectedUser struct {
 	Username  string `xml:"username"`
 	Domain    string `xml:"domain"`
 	Computer  string `xml:"computer"`
@@ -90,7 +90,7 @@ Examples:
 
 		start := time.Now()
 
-		ch := make(chan gatewayUsers, 100)
+		ch := make(chan userSlice, 100)
 		doneCh := make(chan struct{})
 
 		userCount := map[string]int{}
@@ -144,10 +144,10 @@ func init() {
 	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "Get active user")
 }
 
-func printResults(ch <-chan gatewayUsers, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {
+func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {
 	// Print active users
 	for users := range ch {
-		for _, user := range users.Entries {
+		for _, user := range users.Users {
 			// Print user
 			if activeUserFlagSet {
 				if activeUser == user.Username {
@@ -164,7 +164,7 @@ func printResults(ch <-chan gatewayUsers, doneCh chan<- struct{}, userCount map[
 	doneCh <- struct{}{}
 }
 
-func queryGateway(fw, user, pw string, userFlagSet bool) gatewayUsers {
+func queryGateway(fw, user, pw string, userFlagSet bool) userSlice {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -204,13 +204,13 @@ func queryGateway(fw, user, pw string, userFlagSet bool) gatewayUsers {
 		panic(err)
 	}
 
-	var activeUsers gatewayUsers
+	var activeUsers userSlice
 	err = xml.Unmarshal([]byte(respBody), &activeUsers)
 	if err != nil {
 		panic(err)
 	}
 
-	for _, user := range activeUsers.Entries {
+	for _, user := range activeUsers.Users {
 		user.Gateway = fw
 	}
 
@@ -270,7 +270,7 @@ func gatewayActive(gw, user, pw string, userFlagSet bool) bool {
 	return false
 }
 
-func getActiveUsers(gw, user, pw string, queue chan<- gatewayUsers, userFlagSet bool) {
+func getActiveUsers(gw, user, pw string, queue chan<- userSlice, userFlagSet bool) {
 	defer wg.Done()
 	if gatewayActive(gw, user, pw, userFlagSet) {
 		queue <- queryGateway(gw, user, pw, userFlagSet)

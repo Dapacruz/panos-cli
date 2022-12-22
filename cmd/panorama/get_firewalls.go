@@ -30,8 +30,8 @@ var (
 	red   *color.Color = color.New(color.FgRed)
 )
 
-type Firewalls struct {
-	Entries []Firewall `xml:"result>devices>entry"`
+type firewallSlice struct {
+	Firewalls []Firewall `xml:"result>devices>entry"`
 }
 
 type Firewall struct {
@@ -89,19 +89,19 @@ Examples:
 
 		fmt.Fprintf(os.Stderr, "Getting managed firewalls from %v ... ", panorama)
 		data := getFirewalls(panorama, user, password, userFlagSet)
-		var firewalls Firewalls
-		err := xml.Unmarshal([]byte(data), &firewalls)
+		var managedFirewalls firewallSlice
+		err := xml.Unmarshal([]byte(data), &managedFirewalls)
 		if err != nil {
 			red.Fprintf(os.Stderr, "fail\n\n")
 			panic(err)
 		}
 		green.Fprintf(os.Stderr, "success\n")
 
-		sort.Slice(firewalls.Entries, func(i, j int) bool {
-			return firewalls.Entries[i].Name < firewalls.Entries[j].Name
+		sort.Slice(managedFirewalls.Firewalls, func(i, j int) bool {
+			return managedFirewalls.Firewalls[i].Name < managedFirewalls.Firewalls[j].Name
 		})
 
-		for _, fw := range firewalls.Entries {
+		for _, fw := range managedFirewalls.Firewalls {
 			if fw.HaState == "" {
 				fw.HaState = "standalone"
 			}

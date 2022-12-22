@@ -35,11 +35,11 @@ var (
 	red   *color.Color = color.New(color.FgRed)
 )
 
-type ArpCache struct {
-	Entries []Interface `xml:"result>entries>entry"`
+type addressSlice struct {
+	Addresses []address `xml:"result>entries>entry"`
 }
 
-type Interface struct {
+type address struct {
 	Name    string `xml:"interface"`
 	Address string `xml:"ip"`
 }
@@ -90,7 +90,7 @@ Examples:
 
 		fmt.Fprintf(os.Stderr, "Downloading ARP cache from %v ... ", firewall)
 		data := getArpCache(firewall, user, password, userFlagSet)
-		var arpCache ArpCache
+		var arpCache addressSlice
 		err := xml.Unmarshal([]byte(data), &arpCache)
 		if err != nil {
 			red.Fprintf(os.Stderr, "fail\n\n")
@@ -101,7 +101,7 @@ Examples:
 		fmt.Fprintf(os.Stderr, "Parsing ARP cache ... ")
 		// Create a map of interfaces with a slice of addresses
 		interfaces := make(map[string][]string)
-		for _, int := range arpCache.Entries {
+		for _, int := range arpCache.Addresses {
 			interfaces[int.Name] = append(interfaces[int.Name], int.Address)
 		}
 		green.Fprintf(os.Stderr, "success\n")
