@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	wg            sync.WaitGroup
-	gateways      []string
-	user          string
-	password      string
-	connectedUser string
+	wg         sync.WaitGroup
+	gateways   []string
+	user       string
+	password   string
+	activeUser string
 )
 
 type haState struct {
@@ -50,8 +50,8 @@ type gatewayUser struct {
 // getUsersCmd represents the getUsers command
 var getUsersCmd = &cobra.Command{
 	Use:   "users",
-	Short: "Get connected users from all gateways",
-	Long: `Get connected users from all gateways
+	Short: "Get active users from all gateways",
+	Long: `Get active users from all gateways
 
 Examples:
   > panos-cli global-protect get-users
@@ -101,9 +101,15 @@ Examples:
 
 		// Print active users
 		userCount := map[string]int{}
+		activeUserFlagSet := cmd.Flags().Changed("active-user")
 		for users := range queue {
 			for _, user := range users.Entries {
-				fmt.Printf("%+v\n", *user)
+				// Print user
+				if activeUserFlagSet && activeUser == user.Username {
+					fmt.Printf("%+v\n", *user)
+				} else if !activeUserFlagSet {
+					fmt.Printf("%+v\n", *user)
+				}
 				userCount[user.Gateway] += 1
 				userCount["total"] += 1
 			}
@@ -142,7 +148,7 @@ func init() {
 	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect Gateways (comma separated)")
 	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
 	getUsersCmd.Flags().StringVarP(&password, "password", "p", password, "Password for PAN user")
-	getUsersCmd.Flags().StringVarP(&connectedUser, "connected-user", "c", connectedUser, "Get connected user")
+	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "Get active user")
 }
 
 func queryGateway(fw, user, pw string, userFlagSet bool) gatewayUsers {
