@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -104,16 +105,29 @@ Examples:
 		})
 
 		// Print results
-		for _, fw := range managedFirewalls.Firewalls {
-			if fw.HaState == "" {
-				fw.HaState = "standalone"
-			}
-			switch {
-			case terse:
+		switch {
+		case terse:
+			for _, fw := range managedFirewalls.Firewalls {
+				if fw.HaState == "" {
+					fw.HaState = "standalone"
+				}
 				fmt.Printf("%v\n", strings.ToLower(fw.Name))
-			default:
-				fmt.Printf("%+v\n", fw)
 			}
+		default:
+			headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
+			columnFmt := color.New(color.FgHiYellow).SprintfFunc()
+
+			tbl := table.New("Name", "Connected", "Mgmt IP", "Serial", "Uptime", "Model", "Version", "HA State", "Multi-Vsys", "Virtual Systems")
+			tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+
+			for _, fw := range managedFirewalls.Firewalls {
+				if fw.HaState == "" {
+					fw.HaState = "standalone"
+				}
+				tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "))
+			}
+
+			tbl.Print()
 		}
 
 		// Print summary
