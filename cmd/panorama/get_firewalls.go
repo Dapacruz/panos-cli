@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ var (
 	user     string
 	password string
 	panorama string
+	terse    bool
 )
 
 // Create objects to colorize stdout
@@ -101,11 +103,17 @@ Examples:
 			return managedFirewalls.Firewalls[i].Name < managedFirewalls.Firewalls[j].Name
 		})
 
+		// Print results
 		for _, fw := range managedFirewalls.Firewalls {
 			if fw.HaState == "" {
 				fw.HaState = "standalone"
 			}
-			fmt.Printf("%+v\n", fw)
+			switch {
+			case terse:
+				fmt.Printf("%v\n", strings.ToLower(fw.Name))
+			default:
+				fmt.Printf("%+v\n", fw)
+			}
 		}
 
 		// Print summary
@@ -117,9 +125,10 @@ Examples:
 func init() {
 	getCmd.AddCommand(getFirewallsCmd)
 
-	getFirewallsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
-	getFirewallsCmd.Flags().StringVar(&password, "password", password, "Password for PAN user")
-	getFirewallsCmd.Flags().StringVarP(&panorama, "panorama", "p", panorama, "Panorama IP/Hostname")
+	getFirewallsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
+	getFirewallsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
+	getFirewallsCmd.Flags().StringVarP(&panorama, "panorama", "p", panorama, "Panorama IP/hostname")
+	getFirewallsCmd.Flags().BoolVarP(&terse, "terse", "t", false, "list managed firewall names only")
 }
 
 func getFirewalls(panorama, user, pw string, userFlagSet bool) string {

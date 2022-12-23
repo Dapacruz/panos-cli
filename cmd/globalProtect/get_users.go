@@ -138,10 +138,10 @@ Examples:
 func init() {
 	getCmd.AddCommand(getUsersCmd)
 
-	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect Gateways (comma separated)")
-	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
-	getUsersCmd.Flags().StringVar(&password, "password", password, "Password for PAN user")
-	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "Get active user")
+	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
+	getUsersCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
+	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect gateways (comma separated)")
+	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "get active user")
 }
 
 func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {

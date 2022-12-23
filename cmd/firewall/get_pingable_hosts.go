@@ -138,9 +138,9 @@ Examples:
 func init() {
 	getCmd.AddCommand(getPingableHostsCmd)
 
-	getPingableHostsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN User")
-	getPingableHostsCmd.Flags().StringVar(&password, "password", password, "Password for PAN user")
-	getPingableHostsCmd.Flags().IntVarP(&numAddresses, "", "n", 2, "Number of addresses per interface")
+	getPingableHostsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
+	getPingableHostsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
+	getPingableHostsCmd.Flags().IntVarP(&numAddresses, "", "n", 2, "number of addresses per interface")
 	getPingableHostsCmd.Flags().IntVarP(&timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
 }
 
