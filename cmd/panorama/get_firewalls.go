@@ -90,7 +90,7 @@ Examples:
 		start := time.Now()
 
 		fmt.Fprintf(os.Stderr, "Getting managed firewalls from %v ... ", panorama)
-		resp := getFirewalls(panorama, user, password, userFlagSet)
+		resp := getFirewalls(userFlagSet)
 		var managedFirewalls firewallSlice
 		err := xml.Unmarshal([]byte(resp), &managedFirewalls)
 		if err != nil {
@@ -131,7 +131,7 @@ func init() {
 	getFirewallsCmd.Flags().BoolVarP(&terse, "terse", "t", false, "list managed firewall names only")
 }
 
-func getFirewalls(panorama, user, pw string, userFlagSet bool) string {
+func getFirewalls(userFlagSet bool) string {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -150,7 +150,7 @@ func getFirewalls(panorama, user, pw string, userFlagSet bool) string {
 	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
-		creds := fmt.Sprintf("%s:%s", user, pw)
+		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
 		req.Header.Set("Authorization", fmt.Sprintf("Basic %s", credsEnc))
 	}

@@ -89,7 +89,7 @@ Examples:
 		start := time.Now()
 
 		fmt.Fprintf(os.Stderr, "Downloading ARP cache from %v ... ", firewall)
-		data := getArpCache(firewall, user, password, userFlagSet)
+		data := getArpCache(firewall, userFlagSet)
 		var arpCache addressSlice
 		err := xml.Unmarshal([]byte(data), &arpCache)
 		if err != nil {
@@ -110,7 +110,7 @@ Examples:
 		// Harvest pingable addresses from each interface
 		var pingableHosts []string
 		for _, addrs := range interfaces {
-			pingableHosts = append(pingableHosts, getPingableAddresses(addrs, numAddresses, timeout)...)
+			pingableHosts = append(pingableHosts, getPingableAddresses(addrs)...)
 		}
 		green.Fprintf(os.Stderr, "success\n\n")
 
@@ -144,7 +144,7 @@ func init() {
 	getPingableHostsCmd.Flags().IntVarP(&timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
 }
 
-func getPingableAddresses(addrs []string, numAddrs, timeout int) []string {
+func getPingableAddresses(addrs []string) []string {
 	var pingableAddrs []string
 
 	for _, addr := range addrs {
@@ -154,13 +154,13 @@ func getPingableAddresses(addrs []string, numAddrs, timeout int) []string {
 		}
 
 		// Ping ip addr and add to pingableAddrs if a response is received
-		stats := pingAddr(addr, timeout)
+		stats := pingAddr(addr)
 		if stats.PacketLoss == 0 {
 			pingableAddrs = append(pingableAddrs, addr)
 		}
 
 		// skip remaining addrs if pingableAddrs is eqaul to numAddrs
-		if len(pingableAddrs) == numAddrs {
+		if len(pingableAddrs) == numAddresses {
 			break
 		}
 	}
@@ -168,7 +168,7 @@ func getPingableAddresses(addrs []string, numAddrs, timeout int) []string {
 	return pingableAddrs
 }
 
-func pingAddr(addr string, timeout int) *ping.Statistics {
+func pingAddr(addr string) *ping.Statistics {
 	// ping ip addr
 
 	pinger, err := ping.NewPinger(addr)
@@ -190,7 +190,7 @@ func pingAddr(addr string, timeout int) *ping.Statistics {
 	return stats
 }
 
-func getArpCache(fw, user, pw string, userFlagSet bool) string {
+func getArpCache(fw string, userFlagSet bool) string {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -209,7 +209,7 @@ func getArpCache(fw, user, pw string, userFlagSet bool) string {
 	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
-		creds := fmt.Sprintf("%s:%s", user, pw)
+		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
 		req.Header.Set("Authorization", fmt.Sprintf("Basic %s", credsEnc))
 	}

@@ -102,7 +102,7 @@ Examples:
 		// Get active users
 		for _, gw := range gateways {
 			wg.Add(1)
-			go getActiveUsers(gw, user, password, ch, userFlagSet)
+			go getActiveUsers(gw, ch, userFlagSet)
 		}
 		wg.Wait()
 		close(ch)
@@ -164,13 +164,13 @@ func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[str
 	doneCh <- struct{}{}
 }
 
-func queryGateway(fw, user, pw string, userFlagSet bool) userSlice {
+func queryGateway(gw string, userFlagSet bool) userSlice {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
 
-	url := fmt.Sprintf("https://%s/api/", fw)
+	url := fmt.Sprintf("https://%s/api/", gw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -182,7 +182,7 @@ func queryGateway(fw, user, pw string, userFlagSet bool) userSlice {
 	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
-		creds := fmt.Sprintf("%s:%s", user, pw)
+		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
 		req.Header.Set("Authorization", fmt.Sprintf("Basic %s", credsEnc))
 	}
@@ -211,13 +211,13 @@ func queryGateway(fw, user, pw string, userFlagSet bool) userSlice {
 	}
 
 	for _, user := range activeUsers.Users {
-		user.Gateway = fw
+		user.Gateway = gw
 	}
 
 	return activeUsers
 }
 
-func gatewayActive(gw, user, pw string, userFlagSet bool) bool {
+func gatewayActive(gw string, userFlagSet bool) bool {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -235,7 +235,7 @@ func gatewayActive(gw, user, pw string, userFlagSet bool) bool {
 	if !userFlagSet && Config.ApiKey != "" {
 		q.Add("key", Config.ApiKey)
 	} else {
-		creds := fmt.Sprintf("%s:%s", user, pw)
+		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
 		req.Header.Set("Authorization", fmt.Sprintf("Basic %s", credsEnc))
 	}
@@ -270,9 +270,9 @@ func gatewayActive(gw, user, pw string, userFlagSet bool) bool {
 	return false
 }
 
-func getActiveUsers(gw, user, pw string, queue chan<- userSlice, userFlagSet bool) {
+func getActiveUsers(gw string, queue chan<- userSlice, userFlagSet bool) {
 	defer wg.Done()
-	if gatewayActive(gw, user, pw, userFlagSet) {
-		queue <- queryGateway(gw, user, pw, userFlagSet)
+	if gatewayActive(gw, userFlagSet) {
+		queue <- queryGateway(gw, userFlagSet)
 	}
 }
