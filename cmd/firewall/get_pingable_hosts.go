@@ -127,11 +127,11 @@ Examples:
 		for _, addr := range pingableHostsSorted {
 			fmt.Println(addr)
 		}
-		fmt.Fprintln(os.Stderr)
+		fmt.Println()
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " Collection complete: Discovered %d pingable addresses in %.3f seconds\n", len(pingableHosts), elapsed.Seconds())
+		fmt.Printf(" Collection complete: Discovered %d pingable addresses in %.3f seconds\n", len(pingableHosts), elapsed.Seconds())
 	},
 }
 

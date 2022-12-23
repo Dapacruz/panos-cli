@@ -31,10 +31,10 @@ var (
 )
 
 type firewallSlice struct {
-	Firewalls []Firewall `xml:"result>devices>entry"`
+	Firewalls []firewall `xml:"result>devices>entry"`
 }
 
-type Firewall struct {
+type firewall struct {
 	Name            string   `xml:"hostname"`
 	Address         string   `xml:"ip-address"`
 	Serial          string   `xml:"serial"`
@@ -88,14 +88,14 @@ Examples:
 		start := time.Now()
 
 		fmt.Fprintf(os.Stderr, "Getting managed firewalls from %v ... ", panorama)
-		data := getFirewalls(panorama, user, password, userFlagSet)
+		resp := getFirewalls(panorama, user, password, userFlagSet)
 		var managedFirewalls firewallSlice
-		err := xml.Unmarshal([]byte(data), &managedFirewalls)
+		err := xml.Unmarshal([]byte(resp), &managedFirewalls)
 		if err != nil {
 			red.Fprintf(os.Stderr, "fail\n\n")
 			panic(err)
 		}
-		green.Fprintf(os.Stderr, "success\n")
+		green.Fprintf(os.Stderr, "success\n\n")
 
 		sort.Slice(managedFirewalls.Firewalls, func(i, j int) bool {
 			return managedFirewalls.Firewalls[i].Name < managedFirewalls.Firewalls[j].Name
@@ -110,7 +110,7 @@ Examples:
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " \n\nCompleted in %.3f seconds\n", elapsed.Seconds())
+		fmt.Printf(" \n\nCompleted in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 

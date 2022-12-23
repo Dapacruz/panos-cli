@@ -97,7 +97,7 @@ Examples:
 		activeUserFlagSet := cmd.Flags().Changed("active-user")
 		go printResults(ch, doneCh, userCount, activeUserFlagSet)
 
-		fmt.Printf("Getting active users...\n\n")
+		fmt.Fprintf(os.Stderr, "Getting active users...\n\n")
 
 		// Get active users
 		for _, gw := range gateways {
@@ -119,19 +119,19 @@ Examples:
 		})
 
 		// Print statistics
-		fmt.Fprintf(os.Stderr, "\nActive Users:\n\n")
+		fmt.Printf("\nActive Users:\n\n")
 		for _, k := range keys {
 			if k == "total" {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "%v: %v\n", k, userCount[k])
+			fmt.Printf("%v: %v\n", k, userCount[k])
 		}
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Total Active Users:", userCount["total"])
+		fmt.Println()
+		fmt.Println("Total Active Users:", userCount["total"])
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, "\n\n Completed in %.3f seconds\n", elapsed.Seconds())
+		fmt.Printf("\n\n Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
