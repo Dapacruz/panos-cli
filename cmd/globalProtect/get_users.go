@@ -27,6 +27,7 @@ var (
 	user       string
 	password   string
 	activeUser string
+	stats      bool
 )
 
 type haState struct {
@@ -121,15 +122,17 @@ Examples:
 		})
 
 		// Print statistics
-		fmt.Printf("\nActive Users:\n\n")
-		for _, k := range keys {
-			if k == "total" {
-				continue
+		if stats {
+			fmt.Printf("\nActive Users:\n\n")
+			for _, k := range keys {
+				if k == "total" {
+					continue
+				}
+				fmt.Printf("%v: %v\n", k, userCount[k])
 			}
-			fmt.Printf("%v: %v\n", k, userCount[k])
+			fmt.Println()
+			fmt.Println("Total Active Users:", userCount["total"])
 		}
-		fmt.Println()
-		fmt.Println("Total Active Users:", userCount["total"])
 
 		// Print summary
 		elapsed := time.Since(start)
@@ -144,6 +147,7 @@ func init() {
 	getUsersCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect gateways (comma separated)")
 	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "get active user")
+	getUsersCmd.Flags().BoolVarP(&stats, "stats", "s", false, "print active user statistics")
 }
 
 func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {
