@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	wildcard "path/filepath"
 	"sort"
 	"sync"
 	"syscall"
@@ -146,7 +147,7 @@ func init() {
 	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
 	getUsersCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect gateways (comma separated)")
-	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "get active user")
+	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "find active user (wildcards supported)")
 	getUsersCmd.Flags().BoolVarP(&stats, "stats", "s", false, "print active user statistics")
 }
 
@@ -162,7 +163,7 @@ func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[str
 		for _, user := range users.Users {
 			// Print user
 			if activeUserFlagSet {
-				if activeUser == user.Username {
+				if m, _ := wildcard.Match(activeUser, user.Username); m {
 					tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
 				}
 			} else {
