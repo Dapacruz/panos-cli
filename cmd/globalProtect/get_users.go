@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -146,20 +148,28 @@ func init() {
 
 func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {
 	// Print active users
+	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
+	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
+
+	tbl := table.New("Username", "Domain", "Computer", "Client", "Virtual IP", "Public IP", "Login Time", "Gateway")
+	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
+
 	for users := range ch {
 		for _, user := range users.Users {
 			// Print user
 			if activeUserFlagSet {
 				if activeUser == user.Username {
-					fmt.Printf("%+v\n", *user)
+					tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
 				}
 			} else {
-				fmt.Printf("%+v\n", *user)
+				tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
 			}
 			userCount[user.Gateway] += 1
 			userCount["total"] += 1
 		}
 	}
+
+	tbl.Print()
 
 	doneCh <- struct{}{}
 }
