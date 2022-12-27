@@ -159,19 +159,28 @@ func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[str
 	tbl := table.New("Username", "Domain", "Computer", "Client", "Virtual IP", "Public IP", "Login Time", "Gateway")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
+	var connectedUsers []*connectedUser
 	for users := range ch {
 		for _, user := range users.Users {
 			// Print user
 			if activeUserFlagSet {
 				if m, _ := wildcard.Match(activeUser, user.Username); m {
-					tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
+					connectedUsers = append(connectedUsers, user)
 				}
 			} else {
-				tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
+				connectedUsers = append(connectedUsers, user)
 			}
 			userCount[user.Gateway] += 1
 			userCount["total"] += 1
 		}
+	}
+
+	sort.Slice(connectedUsers, func(i, j int) bool {
+		return connectedUsers[i].Username < connectedUsers[j].Username
+	})
+
+	for _, user := range connectedUsers {
+		tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
 	}
 
 	tbl.Print()
