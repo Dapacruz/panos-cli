@@ -30,6 +30,7 @@ var (
 	connected string
 	state     []string
 	model     []string
+	notModel  []string
 )
 
 // Create objects to colorize stdout
@@ -149,6 +150,8 @@ Examples:
 					continue
 				case cmd.Flags().Changed("model") && !contains(model, fw.Model):
 					continue
+				case cmd.Flags().Changed("not-model") && contains(notModel, fw.Model):
+					continue
 				default:
 					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "))
 				}
@@ -171,8 +174,9 @@ func init() {
 	getFirewallsCmd.Flags().StringVarP(&panorama, "panorama", "p", panorama, "Panorama IP/hostname")
 	getFirewallsCmd.Flags().BoolVarP(&terse, "terse", "t", false, "return managed firewall names only")
 	getFirewallsCmd.Flags().StringSliceVarP(&firewall, "firewall", "f", []string{}, "return firewalls matching a comma separated set of name patterns (wildcards supported)")
-	getFirewallsCmd.Flags().StringSliceVar(&state, "state", []string{}, "return firewalls matching a comma separated set of states: active, passive, suspended, standalone")
+	getFirewallsCmd.Flags().StringSliceVarP(&state, "state", "s", []string{}, "return firewalls matching a comma separated set of states: active, passive, suspended, standalone")
 	getFirewallsCmd.Flags().StringSliceVar(&model, "model", []string{}, "return firewalls matching a comma separated set of models")
+	getFirewallsCmd.Flags().StringSliceVar(&notModel, "not-model", []string{}, "return firewalls not matching a comma separated set of models")
 	getFirewallsCmd.Flags().StringVarP(&connected, "connected", "c", "", "return firewalls matching connected state: yes, no")
 }
 
