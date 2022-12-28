@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	wildcard "path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -21,10 +22,14 @@ import (
 )
 
 var (
-	user     string
-	password string
-	panorama string
-	terse    bool
+	user      string
+	password  string
+	firewall  []string
+	panorama  string
+	terse     bool
+	connected string
+	state     []string
+	model     []string
 )
 
 // Create objects to colorize stdout
@@ -34,10 +39,10 @@ var (
 )
 
 type firewallSlice struct {
-	Firewalls []firewall `xml:"result>devices>entry"`
+	Firewalls []fw `xml:"result>devices>entry"`
 }
 
-type firewall struct {
+type fw struct {
 	Name            string   `xml:"hostname"`
 	Address         string   `xml:"ip-address"`
 	Serial          string   `xml:"serial"`
@@ -48,6 +53,18 @@ type firewall struct {
 	HaState         string   `xml:"ha>state"`
 	MultiVsys       string   `xml:"multi-vsys"`
 	VirtualSystems  []string `xml:"vsys>entry>display-name"`
+}
+
+func (f *fw) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type FW fw // new type to prevent recursion
+	firewall := FW{
+		HaState: "standalone",
+	}
+	if err := d.DecodeElement(&firewall, &start); err != nil {
+		return err
+	}
+	*f = (fw)(firewall)
+	return nil
 }
 
 // getFirewallsCmd represents the getFirewalls command
@@ -108,8 +125,10 @@ Examples:
 		switch {
 		case terse:
 			for _, fw := range managedFirewalls.Firewalls {
-				if fw.HaState == "" {
-					fw.HaState = "standalone"
+				if len(firewall) > 0 {
+					if !findFirewall(fw.Name, firewall) {
+						continue
+					}
 				}
 				fmt.Printf("%v\n", strings.ToLower(fw.Name))
 			}
@@ -121,10 +140,18 @@ Examples:
 			tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 			for _, fw := range managedFirewalls.Firewalls {
-				if fw.HaState == "" {
-					fw.HaState = "standalone"
+				switch {
+				case len(firewall) > 0 && !findFirewall(fw.Name, firewall):
+					continue
+				case cmd.Flags().Changed("connected") && (connected != fw.Connected):
+					continue
+				case cmd.Flags().Changed("state") && !contains(state, fw.HaState):
+					continue
+				case cmd.Flags().Changed("model") && !contains(model, fw.Model):
+					continue
+				default:
+					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "))
 				}
-				tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "))
 			}
 
 			tbl.Print()
@@ -142,7 +169,30 @@ func init() {
 	getFirewallsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
 	getFirewallsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getFirewallsCmd.Flags().StringVarP(&panorama, "panorama", "p", panorama, "Panorama IP/hostname")
-	getFirewallsCmd.Flags().BoolVarP(&terse, "terse", "t", false, "list managed firewall names only")
+	getFirewallsCmd.Flags().BoolVarP(&terse, "terse", "t", false, "return managed firewall names only")
+	getFirewallsCmd.Flags().StringSliceVarP(&firewall, "firewall", "f", []string{}, "return firewalls matching a comma separated set of name patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&state, "state", []string{}, "return firewalls matching a comma separated set of states: active, passive, suspended, standalone")
+	getFirewallsCmd.Flags().StringSliceVar(&model, "model", []string{}, "return firewalls matching a comma separated set of models")
+	getFirewallsCmd.Flags().StringVarP(&connected, "connected", "c", "", "return firewalls matching connected state: yes, no")
+}
+
+func contains(slice []string, item string) bool {
+	set := make(map[string]struct{}, len(slice))
+	for _, s := range slice {
+		set[s] = struct{}{}
+	}
+
+	_, ok := set[item]
+	return ok
+}
+
+func findFirewall(fw string, patterns []string) bool {
+	for _, p := range patterns {
+		if m, _ := wildcard.Match(strings.ToLower(p), strings.ToLower(fw)); m {
+			return true
+		}
+	}
+	return false
 }
 
 func getFirewalls(userFlagSet bool) string {
