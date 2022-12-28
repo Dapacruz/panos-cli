@@ -23,12 +23,12 @@ import (
 )
 
 var (
-	wg         sync.WaitGroup
-	gateways   []string
-	user       string
-	password   string
-	activeUser string
-	stats      bool
+	wg            sync.WaitGroup
+	gateways      []string
+	user          string
+	password      string
+	connectedUser string
+	stats         bool
 )
 
 type haState struct {
@@ -37,10 +37,10 @@ type haState struct {
 }
 
 type userSlice struct {
-	Users []*connectedUser `xml:"result>entry"`
+	Users []*conUser `xml:"result>entry"`
 }
 
-type connectedUser struct {
+type conUser struct {
 	Username  string `xml:"username"`
 	Domain    string `xml:"domain"`
 	Computer  string `xml:"computer"`
@@ -54,8 +54,8 @@ type connectedUser struct {
 // getUsersCmd represents the getUsers command
 var getUsersCmd = &cobra.Command{
 	Use:   "users",
-	Short: "Get active users from all gateways",
-	Long: `Get active users from all gateways
+	Short: "Get connected users from all gateways",
+	Long: `Get connected users from all gateways
 
 Examples:
   > panos-cli global-protect get users
@@ -98,15 +98,15 @@ Examples:
 		doneCh := make(chan struct{})
 
 		userCount := map[string]int{}
-		activeUserFlagSet := cmd.Flags().Changed("active-user")
-		go printResults(ch, doneCh, userCount, activeUserFlagSet)
+		connectedUserFlagSet := cmd.Flags().Changed("connected-user")
+		go printResults(ch, doneCh, userCount, connectedUserFlagSet)
 
-		fmt.Fprintf(os.Stderr, "Getting active users...\n\n")
+		fmt.Fprintf(os.Stderr, "Getting connected users...\n\n")
 
-		// Get active users
+		// Get connected users
 		for _, gw := range gateways {
 			wg.Add(1)
-			go getActiveUsers(gw, ch, userFlagSet)
+			go getConnectedUsers(gw, ch, userFlagSet)
 		}
 		wg.Wait()
 		close(ch)
@@ -124,7 +124,7 @@ Examples:
 
 		// Print statistics
 		if stats {
-			fmt.Printf("\nActive Users:\n\n")
+			fmt.Printf("\nConnected Users:\n\n")
 			for _, k := range keys {
 				if k == "total" {
 					continue
@@ -132,7 +132,7 @@ Examples:
 				fmt.Printf("%v: %v\n", k, userCount[k])
 			}
 			fmt.Println()
-			fmt.Println("Total Active Users:", userCount["total"])
+			fmt.Println("Total Connected Users:", userCount["total"])
 		}
 
 		// Print summary
@@ -147,24 +147,24 @@ func init() {
 	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
 	getUsersCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect gateways (comma separated)")
-	getUsersCmd.Flags().StringVarP(&activeUser, "active-user", "a", activeUser, "find active user (wildcards supported)")
-	getUsersCmd.Flags().BoolVarP(&stats, "stats", "s", false, "print active user statistics")
+	getUsersCmd.Flags().StringVarP(&connectedUser, "connected-user", "c", connectedUser, "find connected user (wildcards supported)")
+	getUsersCmd.Flags().BoolVarP(&stats, "stats", "s", false, "show connected user statistics")
 }
 
-func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, activeUserFlagSet bool) {
-	// Print active users
+func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, connectedUserFlagSet bool) {
+	// Print connected users
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
 
 	tbl := table.New("Username", "Domain", "Computer", "Client", "Virtual IP", "Public IP", "Login Time", "Gateway")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
-	var connectedUsers []*connectedUser
+	var connectedUsers []*conUser
 	for users := range ch {
 		for _, user := range users.Users {
 			// Print user
-			if activeUserFlagSet {
-				if m, _ := wildcard.Match(activeUser, user.Username); m {
+			if connectedUserFlagSet {
+				if m, _ := wildcard.Match(connectedUser, user.Username); m {
 					connectedUsers = append(connectedUsers, user)
 				}
 			} else {
@@ -228,17 +228,17 @@ func queryGateway(gw string, userFlagSet bool) userSlice {
 		panic(err)
 	}
 
-	var activeUsers userSlice
-	err = xml.Unmarshal([]byte(respBody), &activeUsers)
+	var connectedUsers userSlice
+	err = xml.Unmarshal([]byte(respBody), &connectedUsers)
 	if err != nil {
 		panic(err)
 	}
 
-	for _, user := range activeUsers.Users {
+	for _, user := range connectedUsers.Users {
 		user.Gateway = gw
 	}
 
-	return activeUsers
+	return connectedUsers
 }
 
 func gatewayActive(gw string, userFlagSet bool) bool {
@@ -294,7 +294,7 @@ func gatewayActive(gw string, userFlagSet bool) bool {
 	return false
 }
 
-func getActiveUsers(gw string, queue chan<- userSlice, userFlagSet bool) {
+func getConnectedUsers(gw string, queue chan<- userSlice, userFlagSet bool) {
 	defer wg.Done()
 	if gatewayActive(gw, userFlagSet) {
 		queue <- queryGateway(gw, userFlagSet)
