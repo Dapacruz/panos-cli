@@ -183,9 +183,9 @@ Examples:
 					continue
 				case cmd.Flags().Changed("state") && !contains(state, fw.HaState):
 					continue
-				case cmd.Flags().Changed("model") && !contains(model, fw.Model):
+				case cmd.Flags().Changed("model") && !modelContains(model, fw.Model):
 					continue
-				case cmd.Flags().Changed("not-model") && contains(notModel, fw.Model):
+				case cmd.Flags().Changed("not-model") && modelContains(notModel, fw.Model):
 					continue
 				default:
 					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "), strings.Join(firewallTags[fw.Serial], ", "))
@@ -219,10 +219,20 @@ func init() {
 func contains(slice []string, item string) bool {
 	set := make(map[string]struct{}, len(slice))
 	for _, s := range slice {
-		set[s] = struct{}{}
+		set[strings.ToLower(s)] = struct{}{}
 	}
 
-	_, ok := set[item]
+	_, ok := set[strings.ToLower(item)]
+	return ok
+}
+
+func modelContains(slice []string, item string) bool {
+	set := make(map[string]struct{}, len(slice))
+	for _, s := range slice {
+		set[strings.TrimLeft(strings.ToLower(s), "pa-")] = struct{}{}
+	}
+
+	_, ok := set[strings.TrimLeft(strings.ToLower(item), "pa-")]
 	return ok
 }
 
