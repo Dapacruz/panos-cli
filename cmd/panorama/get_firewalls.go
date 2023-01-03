@@ -56,6 +56,36 @@ type fw struct {
 	VirtualSystems  []string `xml:"vsys>entry>display-name"`
 }
 
+type tagSlice struct {
+	Firewalls []tag `xml:"result>mgt-config>devices>entry"`
+}
+
+type tag struct {
+	SerialNumber string   `xml:"name,attr"`
+	Tags         []string `xml:"vsys>entry>tags>member"`
+}
+
+var exists = struct{}{}
+
+type set struct {
+	m map[string]struct{}
+}
+
+func NewSet() *set {
+	s := &set{}
+	s.m = make(map[string]struct{})
+	return s
+}
+
+func (s *set) Add(value string) {
+	s.m[value] = exists
+}
+
+func (s *set) Contains(value string) bool {
+	_, c := s.m[value]
+	return c
+}
+
 func (f *fw) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	type FW fw // new type to prevent recursion
 	firewall := FW{
@@ -134,10 +164,11 @@ Examples:
 				fmt.Printf("%v\n", strings.ToLower(fw.Name))
 			}
 		default:
+			firewallTags := getFirewallTags(cmd.Flags().Changed("user"))
+
 			headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 			columnFmt := color.New(color.FgHiYellow).SprintfFunc()
-
-			tbl := table.New("Name", "Connected", "Mgmt IP", "Serial", "Uptime", "Model", "Version", "HA State", "Multi-Vsys", "Virtual Systems")
+			tbl := table.New("Name", "Connected", "Mgmt IP", "Serial", "Uptime", "Model", "Version", "HA State", "Multi-Vsys", "Virtual Systems", "Tags")
 			tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 			for _, fw := range managedFirewalls.Firewalls {
@@ -153,7 +184,7 @@ Examples:
 				case cmd.Flags().Changed("not-model") && contains(notModel, fw.Model):
 					continue
 				default:
-					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "))
+					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "), strings.Join(firewallTags[fw.Serial], ", "))
 				}
 			}
 
@@ -244,4 +275,76 @@ func getFirewalls(userFlagSet bool) string {
 	}
 
 	return string(respBody)
+}
+
+func getFirewallTags(userFlagSet bool) map[string][]string {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	url := fmt.Sprintf("https://%s/api/", panorama)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		panic(err)
+	}
+
+	q := req.URL.Query()
+	q.Add("type", "config")
+	q.Add("action", "get")
+	q.Add("xpath", "/config/mgt-config")
+	if !userFlagSet && Config.ApiKey != "" {
+		q.Add("key", Config.ApiKey)
+	} else {
+		creds := fmt.Sprintf("%s:%s", user, password)
+		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
+		req.Header.Set("Authorization", fmt.Sprintf("Basic %s", credsEnc))
+	}
+
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		log.Fatal(resp.Status)
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		panic(err)
+	}
+
+	return parseTags(respBody)
+}
+
+func parseTags(c []byte) map[string][]string {
+	var firewalls tagSlice
+	err := xml.Unmarshal(c, &firewalls)
+	if err != nil {
+		red.Fprintf(os.Stderr, "unable to unmarshal xml\n")
+	}
+
+	tags := make(map[string][]string)
+	for _, fw := range firewalls.Firewalls {
+		// Remove duplicate tags
+		unique := NewSet()
+		for _, tag := range fw.Tags {
+			if unique.Contains(tag) {
+				continue
+			} else {
+				unique.Add(tag)
+				tags[fw.SerialNumber] = append(tags[fw.SerialNumber], tag)
+			}
+		}
+	}
+
+	return tags
 }
