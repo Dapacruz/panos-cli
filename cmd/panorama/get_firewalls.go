@@ -22,15 +22,16 @@ import (
 )
 
 var (
-	user      string
-	password  string
-	firewall  []string
-	panorama  string
-	terse     bool
-	connected string
-	state     []string
-	model     []string
-	notModel  []string
+	user            string
+	password        string
+	firewallPattern []string
+	tagPattern      []string
+	panorama        string
+	terse           bool
+	connected       string
+	state           []string
+	model           []string
+	notModel        []string
 )
 
 // Create objects to colorize stdout
@@ -156,8 +157,8 @@ Examples:
 		switch {
 		case terse:
 			for _, fw := range managedFirewalls.Firewalls {
-				if len(firewall) > 0 {
-					if !findFirewall(fw.Name, firewall) {
+				if len(firewallPattern) > 0 {
+					if !findFirewall(fw.Name, firewallPattern) {
 						continue
 					}
 				}
@@ -173,7 +174,9 @@ Examples:
 
 			for _, fw := range managedFirewalls.Firewalls {
 				switch {
-				case len(firewall) > 0 && !findFirewall(fw.Name, firewall):
+				case len(firewallPattern) > 0 && !findFirewall(fw.Name, firewallPattern):
+					continue
+				case cmd.Flags().Changed("tag") && !findTag(firewallTags[fw.Serial], tagPattern):
 					continue
 				case cmd.Flags().Changed("connected") && (connected != fw.Connected):
 					continue
@@ -203,12 +206,13 @@ func init() {
 	getFirewallsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
 	getFirewallsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getFirewallsCmd.Flags().StringVarP(&panorama, "panorama", "p", panorama, "Panorama IP/hostname")
-	getFirewallsCmd.Flags().BoolVarP(&terse, "terse", "t", false, "return managed firewall names only")
-	getFirewallsCmd.Flags().StringSliceVarP(&firewall, "firewall", "f", []string{}, "return firewalls matching a comma separated set of name patterns (wildcards supported)")
+	getFirewallsCmd.Flags().BoolVar(&terse, "terse", false, "return managed firewall names only")
+	getFirewallsCmd.Flags().StringSliceVarP(&firewallPattern, "firewall", "f", []string{}, "return firewalls matching a comma separated set of name patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVarP(&state, "state", "s", []string{}, "return firewalls matching a comma separated set of states: active, passive, suspended, standalone")
 	getFirewallsCmd.Flags().StringSliceVar(&model, "model", []string{}, "return firewalls matching a comma separated set of models")
 	getFirewallsCmd.Flags().StringSliceVar(&notModel, "not-model", []string{}, "return firewalls not matching a comma separated set of models")
 	getFirewallsCmd.Flags().StringVarP(&connected, "connected", "c", "", "return firewalls matching connected state: yes, no")
+	getFirewallsCmd.Flags().StringSliceVarP(&tagPattern, "tag", "t", []string{}, "return firewalls matching a comma separated set of tag patterns (wildcards supported)")
 }
 
 func contains(slice []string, item string) bool {
@@ -223,8 +227,19 @@ func contains(slice []string, item string) bool {
 
 func findFirewall(fw string, patterns []string) bool {
 	for _, p := range patterns {
-		if m, _ := wildcard.Match(strings.ToLower(p), strings.ToLower(fw)); m {
+		if m, _ := wildcard.Match(strings.TrimSpace(strings.ToLower(p)), strings.ToLower(fw)); m {
 			return true
+		}
+	}
+	return false
+}
+
+func findTag(tags []string, patterns []string) bool {
+	for _, t := range tags {
+		for _, p := range patterns {
+			if m, _ := wildcard.Match(strings.TrimSpace(strings.ToLower(p)), strings.ToLower(t)); m {
+				return true
+			}
 		}
 	}
 	return false
