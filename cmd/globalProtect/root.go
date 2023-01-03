@@ -5,8 +5,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Config = &cmd.Config
-
 // globalProtectCmd represents the globalProtect command
 var globalProtectCmd = &cobra.Command{
 	Use:   "global-protect",

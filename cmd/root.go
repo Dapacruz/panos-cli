@@ -59,11 +59,6 @@ func init() {
 		} else {
 			panic(fmt.Errorf("fatal error config file: %w", err))
 		}
-	} else {
-		err := viper.Unmarshal(&Config)
-		if err != nil {
-			panic(fmt.Errorf("unable to decode into struct, %v", err))
-		}
 	}
 }
 
@@ -132,12 +127,6 @@ global-protect:
 
 	// Set the permissions on the config file
 	os.Chmod(viper.ConfigFileUsed(), 0600)
-
-	// Populate the conrfig struct with the contents of the new config file
-	err = viper.Unmarshal(&Config)
-	if err != nil {
-		panic(fmt.Errorf("unable to decode into struct, %v", err))
-	}
 
 	fmt.Printf("\n\nInitialization complete.\n\n")
 	fmt.Printf("Configuration file saved to %v.\n\n", viper.ConfigFileUsed())

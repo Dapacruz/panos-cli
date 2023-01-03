@@ -5,8 +5,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Config = &cmd.Config
-
 // firewallCmd represents the firewall command
 var firewallCmd = &cobra.Command{
 	Use:   "firewall",

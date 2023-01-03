@@ -12,8 +12,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var Config = &cmd.Config
-
 // globalProtectCmd represents the globalProtect command
 var configCmd = &cobra.Command{
 	Use:   "config",

@@ -63,26 +63,29 @@ Examples:
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no gateways are set by flag or config file, exit
-		if len(gateways) == 0 && len(Config.GlobalProtect.Gateways) == 0 {
+		cGateways := viper.GetStringMapStringSlice("global-protect")["gateways"]
+		if len(gateways) == 0 && (len(cGateways) == 0 || (len(cGateways) == 1 && cGateways[0] == "")) {
 			cmd.Help()
 			fmt.Fprintf(os.Stderr, "\n\nNo GlobalProtect Gateways found in config file %v. Update config file or use the --gateways flag.\n", viper.ConfigFileUsed())
 			os.Exit(1)
 		} else if len(gateways) == 0 {
-			gateways = Config.GlobalProtect.Gateways
+			gateways = cGateways
 		}
 
 		// If the apikey and user is not set, prompt for user
 		fmt.Fprintln(os.Stderr)
-		if Config.ApiKey == "" && Config.User == "" && user == "" {
+		apikey := viper.GetString("apikey")
+		cUser := viper.GetString("user")
+		if apikey == "" && user == "" && cUser == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
 		} else if user == "" {
-			user = Config.User
+			user = cUser
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
 		userFlagSet := cmd.Flags().Changed("user")
-		if userFlagSet || (Config.ApiKey == "" && password == "") {
+		if userFlagSet || (apikey == "" && password == "") {
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(syscall.Stdin))
 			if err != nil {
@@ -101,12 +104,12 @@ Examples:
 		connectedUserFlagSet := cmd.Flags().Changed("connected-user")
 		go printResults(ch, doneCh, userCount, connectedUserFlagSet)
 
-		fmt.Fprintf(os.Stderr, "Getting connected users...\n\n")
+		fmt.Fprintf(os.Stderr, "Getting connected users ...\n\n")
 
 		// Get connected users
 		for _, gw := range gateways {
 			wg.Add(1)
-			go getConnectedUsers(gw, ch, userFlagSet)
+			go getConnectedUsers(gw, apikey, ch, userFlagSet)
 		}
 		wg.Wait()
 		close(ch)
@@ -144,7 +147,7 @@ Examples:
 func init() {
 	getCmd.AddCommand(getUsersCmd)
 
-	getUsersCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
+	getUsersCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	getUsersCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getUsersCmd.Flags().StringSliceVarP(&gateways, "gateways", "g", gateways, "GlobalProtect gateways (comma separated)")
 	getUsersCmd.Flags().StringVarP(&connectedUser, "connected-user", "c", connectedUser, "find connected user (wildcards supported)")
@@ -188,7 +191,7 @@ func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[str
 	doneCh <- struct{}{}
 }
 
-func queryGateway(gw string, userFlagSet bool) userSlice {
+func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -203,8 +206,8 @@ func queryGateway(gw string, userFlagSet bool) userSlice {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><global-protect-gateway><current-user></current-user></global-protect-gateway></show>")
-	if !userFlagSet && Config.ApiKey != "" {
-		q.Add("key", Config.ApiKey)
+	if !userFlagSet && apikey != "" {
+		q.Add("key", apikey)
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
@@ -241,7 +244,7 @@ func queryGateway(gw string, userFlagSet bool) userSlice {
 	return connectedUsers
 }
 
-func gatewayActive(gw string, userFlagSet bool) bool {
+func gatewayActive(gw, apikey string, userFlagSet bool) bool {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -256,8 +259,8 @@ func gatewayActive(gw string, userFlagSet bool) bool {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><high-availability><state></state></high-availability></show>")
-	if !userFlagSet && Config.ApiKey != "" {
-		q.Add("key", Config.ApiKey)
+	if !userFlagSet && apikey != "" {
+		q.Add("key", apikey)
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
@@ -294,9 +297,9 @@ func gatewayActive(gw string, userFlagSet bool) bool {
 	return false
 }
 
-func getConnectedUsers(gw string, queue chan<- userSlice, userFlagSet bool) {
+func getConnectedUsers(gw, apikey string, queue chan<- userSlice, userFlagSet bool) {
 	defer wg.Done()
-	if gatewayActive(gw, userFlagSet) {
-		queue <- queryGateway(gw, userFlagSet)
+	if gatewayActive(gw, apikey, userFlagSet) {
+		queue <- queryGateway(gw, apikey, userFlagSet)
 	}
 }

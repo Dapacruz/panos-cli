@@ -18,6 +18,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -111,23 +112,23 @@ Examples:
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr)
-		if Config.User == "" && user == "" {
+		if viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
 		} else if user == "" {
-			user = Config.User
+			user = viper.GetString("user")
 		}
 
-		if Config.Panorama == "" && panorama == "" {
+		if viper.GetString("panorama") == "" && panorama == "" {
 			fmt.Fprint(os.Stderr, "Panorama IP/Hostname: ")
 			fmt.Scanln(&panorama)
 		} else if panorama == "" {
-			panorama = Config.Panorama
+			panorama = viper.GetString("panorama")
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
 		userFlagSet := cmd.Flags().Changed("user")
-		if userFlagSet || (Config.ApiKey == "" && password == "") {
+		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(syscall.Stdin))
 			if err != nil {
@@ -203,7 +204,7 @@ Examples:
 func init() {
 	getCmd.AddCommand(getFirewallsCmd)
 
-	getFirewallsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
+	getFirewallsCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	getFirewallsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getFirewallsCmd.Flags().StringVarP(&panorama, "panorama", "p", panorama, "Panorama IP/hostname")
 	getFirewallsCmd.Flags().BoolVar(&terse, "terse", false, "return managed firewall names only")
@@ -261,8 +262,8 @@ func getFirewalls(userFlagSet bool) string {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><devices><all></all></devices></show>")
-	if !userFlagSet && Config.ApiKey != "" {
-		q.Add("key", Config.ApiKey)
+	if !userFlagSet && viper.GetString("apikey") != "" {
+		q.Add("key", viper.GetString("apikey"))
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
@@ -309,8 +310,8 @@ func getFirewallTags(userFlagSet bool) map[string][]string {
 	q.Add("type", "config")
 	q.Add("action", "get")
 	q.Add("xpath", "/config/mgt-config")
-	if !userFlagSet && Config.ApiKey != "" {
-		q.Add("key", Config.ApiKey)
+	if !userFlagSet && viper.GetString("apikey") != "" {
+		q.Add("key", viper.GetString("apikey"))
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))

@@ -19,6 +19,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/go-ping/ping"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -67,16 +68,16 @@ Examples:
 		}
 
 		fmt.Fprintln(os.Stderr)
-		if Config.User == "" && user == "" {
+		if viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
 		} else if user == "" {
-			user = Config.User
+			user = viper.GetString("user")
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
 		userFlagSet := cmd.Flags().Changed("user")
-		if userFlagSet || (Config.ApiKey == "" && password == "") {
+		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(syscall.Stdin))
 			if err != nil {
@@ -138,7 +139,7 @@ Examples:
 func init() {
 	getCmd.AddCommand(getPingableHostsCmd)
 
-	getPingableHostsCmd.Flags().StringVarP(&user, "user", "u", user, "PAN admin user")
+	getPingableHostsCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	getPingableHostsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getPingableHostsCmd.Flags().IntVarP(&numAddresses, "", "n", 2, "number of addresses per interface")
 	getPingableHostsCmd.Flags().IntVarP(&timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
@@ -206,8 +207,8 @@ func getArpCache(fw string, userFlagSet bool) string {
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><arp><entry name = 'all'/></arp></show>")
-	if !userFlagSet && Config.ApiKey != "" {
-		q.Add("key", Config.ApiKey)
+	if !userFlagSet && viper.GetString("apikey") != "" {
+		q.Add("key", viper.GetString("apikey"))
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))

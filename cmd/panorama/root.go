@@ -5,8 +5,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Config = &cmd.Config
-
 // panoramaCmd represents the panorama command
 var panoramaCmd = &cobra.Command{
 	Use:   "panorama",
