@@ -27,6 +27,7 @@ var (
 	password        string
 	firewallPattern []string
 	tagPattern      []string
+	notTagPattern   []string
 	panorama        string
 	terse           bool
 	connected       string
@@ -179,6 +180,8 @@ Examples:
 					continue
 				case cmd.Flags().Changed("tag") && !findTag(firewallTags[fw.Serial], tagPattern):
 					continue
+				case cmd.Flags().Changed("not-tag") && findTag(firewallTags[fw.Serial], notTagPattern):
+					continue
 				case cmd.Flags().Changed("connected") && (connected != fw.Connected):
 					continue
 				case cmd.Flags().Changed("state") && !contains(state, fw.HaState):
@@ -214,6 +217,7 @@ func init() {
 	getFirewallsCmd.Flags().StringSliceVar(&notModel, "not-model", []string{}, "return firewalls not matching a comma separated set of models")
 	getFirewallsCmd.Flags().StringVarP(&connected, "connected", "c", "", "return firewalls matching connected state: yes, no")
 	getFirewallsCmd.Flags().StringSliceVarP(&tagPattern, "tag", "t", []string{}, "return firewalls matching a comma separated set of tag patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&notTagPattern, "not-tag", []string{}, "return firewalls not matching a comma separated set of tag patterns (wildcards supported)")
 }
 
 func contains(slice []string, item string) bool {
