@@ -38,6 +38,8 @@ var (
 	state             []string
 	modelPattern      []string
 	notModelPattern   []string
+	serialPattern     []string
+	notSerialPattern  []string
 )
 
 // Create objects to colorize stdout
@@ -187,6 +189,10 @@ Examples:
 				continue
 			case cmd.Flags().Changed("not-version") && match(notVersionPattern, "", fw.SoftwareVersion):
 				continue
+			case cmd.Flags().Changed("serial") && !match(serialPattern, "", fw.Serial):
+				continue
+			case cmd.Flags().Changed("not-serial") && match(notSerialPattern, "", fw.Serial):
+				continue
 			case cmd.Flags().Changed("connected") && (connected != fw.Connected):
 				continue
 			case cmd.Flags().Changed("state") && !contains(state, fw.HaState, ""):
@@ -232,6 +238,8 @@ func init() {
 	getFirewallsCmd.Flags().StringSliceVar(&notVsysPattern, "not-vsys", []string{}, "return firewalls not matching a comma separated set of vsys patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVar(&versionPattern, "version", []string{}, "return firewalls matching a comma separated set of version patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVar(&notVersionPattern, "not-version", []string{}, "return firewalls not matching a comma separated set of version patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&serialPattern, "serial", []string{}, "return firewalls matching a comma separated set of serial number patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&notSerialPattern, "not-serial", []string{}, "return firewalls not matching a comma separated set of serial number patterns (wildcards supported)")
 }
 
 func contains(s []string, item, trim string) bool {
