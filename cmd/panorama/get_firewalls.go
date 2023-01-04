@@ -74,17 +74,17 @@ type set struct {
 	m map[string]struct{}
 }
 
-func NewSet() *set {
+func newSet() *set {
 	s := &set{}
 	s.m = make(map[string]struct{})
 	return s
 }
 
-func (s *set) Add(value string) {
+func (s *set) add(value string) {
 	s.m[value] = exists
 }
 
-func (s *set) Contains(value string) bool {
+func (s *set) contains(value string) bool {
 	_, c := s.m[value]
 	return c
 }
@@ -365,12 +365,12 @@ func parseTags(c []byte) map[string][]string {
 	tags := make(map[string][]string)
 	for _, fw := range firewalls.Firewalls {
 		// Remove duplicate tags
-		unique := NewSet()
+		unique := newSet()
 		for _, tag := range fw.Tags {
-			if unique.Contains(tag) {
+			if unique.contains(tag) {
 				continue
 			} else {
-				unique.Add(tag)
+				unique.add(tag)
 				tags[fw.SerialNumber] = append(tags[fw.SerialNumber], tag)
 			}
 		}
