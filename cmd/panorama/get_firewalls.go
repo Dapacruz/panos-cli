@@ -23,19 +23,21 @@ import (
 )
 
 var (
-	user            string
-	password        string
-	firewallPattern []string
-	tagPattern      []string
-	notTagPattern   []string
-	vsysPattern     []string
-	notVsysPattern  []string
-	panorama        string
-	terse           bool
-	connected       string
-	state           []string
-	modelPattern    []string
-	notModelPattern []string
+	user              string
+	password          string
+	firewallPattern   []string
+	tagPattern        []string
+	notTagPattern     []string
+	vsysPattern       []string
+	notVsysPattern    []string
+	versionPattern    []string
+	notVersionPattern []string
+	panorama          string
+	terse             bool
+	connected         string
+	state             []string
+	modelPattern      []string
+	notModelPattern   []string
 )
 
 // Create objects to colorize stdout
@@ -181,6 +183,10 @@ Examples:
 				continue
 			case cmd.Flags().Changed("not-vsys") && match(notVsysPattern, "", fw.VirtualSystems...):
 				continue
+			case cmd.Flags().Changed("version") && !match(versionPattern, "", fw.SoftwareVersion):
+				continue
+			case cmd.Flags().Changed("not-version") && match(notVersionPattern, "", fw.SoftwareVersion):
+				continue
 			case cmd.Flags().Changed("connected") && (connected != fw.Connected):
 				continue
 			case cmd.Flags().Changed("state") && !contains(state, fw.HaState, ""):
@@ -224,6 +230,8 @@ func init() {
 	getFirewallsCmd.Flags().StringSliceVar(&notTagPattern, "not-tag", []string{}, "return firewalls not matching a comma separated set of tag patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVarP(&vsysPattern, "vsys", "v", []string{}, "return firewalls matching a comma separated set of vsys patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVar(&notVsysPattern, "not-vsys", []string{}, "return firewalls not matching a comma separated set of vsys patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&versionPattern, "version", []string{}, "return firewalls matching a comma separated set of version patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&notVersionPattern, "not-version", []string{}, "return firewalls not matching a comma separated set of version patterns (wildcards supported)")
 }
 
 func contains(s []string, item, trim string) bool {
