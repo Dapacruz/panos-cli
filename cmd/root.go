@@ -17,18 +17,6 @@ const (
 	VIPER_CONFIG_PATH string = "$HOME"
 )
 
-var Config config
-
-type config struct {
-	ApiKey        string `mapstructure:"apikey"`
-	User          string `mapstructure:"user"`
-	Password      string
-	GlobalProtect struct {
-		Gateways []string `mapstructure:"gateways"`
-	} `mapstructure:"global-protect"`
-	Panorama string `mapstructure:"panorama"`
-}
-
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:     "panos-cli",
