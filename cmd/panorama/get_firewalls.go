@@ -28,6 +28,8 @@ var (
 	firewallPattern []string
 	tagPattern      []string
 	notTagPattern   []string
+	vsysPattern     []string
+	notVsysPattern  []string
 	panorama        string
 	terse           bool
 	connected       string
@@ -175,6 +177,10 @@ Examples:
 				continue
 			case cmd.Flags().Changed("not-tag") && match(notTagPattern, "", firewallTags[fw.Serial]...):
 				continue
+			case cmd.Flags().Changed("vsys") && !match(vsysPattern, "", fw.VirtualSystems...):
+				continue
+			case cmd.Flags().Changed("not-vsys") && match(notVsysPattern, "", fw.VirtualSystems...):
+				continue
 			case cmd.Flags().Changed("connected") && (connected != fw.Connected):
 				continue
 			case cmd.Flags().Changed("state") && !contains(state, fw.HaState, ""):
@@ -216,6 +222,8 @@ func init() {
 	getFirewallsCmd.Flags().StringVarP(&connected, "connected", "c", "", "return firewalls matching connected state: yes, no")
 	getFirewallsCmd.Flags().StringSliceVarP(&tagPattern, "tag", "t", []string{}, "return firewalls matching a comma separated set of tag patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVar(&notTagPattern, "not-tag", []string{}, "return firewalls not matching a comma separated set of tag patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVarP(&vsysPattern, "vsys", "v", []string{}, "return firewalls matching a comma separated set of vsys patterns (wildcards supported)")
+	getFirewallsCmd.Flags().StringSliceVar(&notVsysPattern, "not-vsys", []string{}, "return firewalls not matching a comma separated set of vsys patterns (wildcards supported)")
 }
 
 func contains(s []string, item, trim string) bool {
