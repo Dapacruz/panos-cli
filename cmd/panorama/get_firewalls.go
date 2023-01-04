@@ -156,45 +156,42 @@ Examples:
 		})
 
 		// Print results
-		switch {
-		case terse:
-			for _, fw := range managedFirewalls.Firewalls {
-				if len(firewallPattern) > 0 {
-					if !findFirewall(fw.Name, firewallPattern) {
-						continue
-					}
-				}
-				fmt.Printf("%v\n", strings.ToLower(fw.Name))
-			}
-		default:
-			firewallTags := getFirewallTags(cmd.Flags().Changed("user"))
-
-			headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
-			columnFmt := color.New(color.FgHiYellow).SprintfFunc()
-			tbl := table.New("Name", "Connected", "Mgmt IP", "Serial", "Uptime", "Model", "Version", "HA State", "Multi-Vsys", "Virtual Systems", "Tags")
+		var tbl table.Table
+		var headerFmt func(format string, a ...interface{}) string
+		var columnFmt func(format string, a ...interface{}) string
+		if !terse {
+			headerFmt = color.New(color.FgBlue, color.Underline).SprintfFunc()
+			columnFmt = color.New(color.FgHiYellow).SprintfFunc()
+			tbl = table.New("Name", "Connected", "Mgmt IP", "Serial", "Uptime", "Model", "Version", "HA State", "Multi-Vsys", "Virtual Systems", "Tags")
 			tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
-
-			for _, fw := range managedFirewalls.Firewalls {
-				switch {
-				case len(firewallPattern) > 0 && !findFirewall(fw.Name, firewallPattern):
-					continue
-				case cmd.Flags().Changed("tag") && !findTag(firewallTags[fw.Serial], tagPattern):
-					continue
-				case cmd.Flags().Changed("not-tag") && findTag(firewallTags[fw.Serial], notTagPattern):
-					continue
-				case cmd.Flags().Changed("connected") && (connected != fw.Connected):
-					continue
-				case cmd.Flags().Changed("state") && !contains(state, fw.HaState):
-					continue
-				case cmd.Flags().Changed("model") && !modelContains(model, fw.Model):
-					continue
-				case cmd.Flags().Changed("not-model") && modelContains(notModel, fw.Model):
-					continue
-				default:
-					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, ", "), strings.Join(firewallTags[fw.Serial], ", "))
+		}
+		firewallTags := getFirewallTags(cmd.Flags().Changed("user"))
+		for _, fw := range managedFirewalls.Firewalls {
+			switch {
+			case len(firewallPattern) > 0 && !findFirewall(fw.Name, firewallPattern):
+				continue
+			case cmd.Flags().Changed("tag") && !findTag(firewallTags[fw.Serial], tagPattern):
+				continue
+			case cmd.Flags().Changed("not-tag") && findTag(firewallTags[fw.Serial], notTagPattern):
+				continue
+			case cmd.Flags().Changed("connected") && (connected != fw.Connected):
+				continue
+			case cmd.Flags().Changed("state") && !contains(state, fw.HaState):
+				continue
+			case cmd.Flags().Changed("model") && !modelContains(model, fw.Model):
+				continue
+			case cmd.Flags().Changed("not-model") && modelContains(notModel, fw.Model):
+				continue
+			default:
+				if !terse {
+					tbl.AddRow(fw.Name, fw.Connected, fw.Address, fw.Serial, fw.Uptime, fw.Model, fw.SoftwareVersion, fw.HaState, fw.MultiVsys, strings.Join(fw.VirtualSystems, "\n"), strings.Join(firewallTags[fw.Serial], "\n"))
+				} else {
+					fmt.Printf("%v\n", strings.ToLower(fw.Name))
 				}
 			}
+		}
 
+		if !terse {
 			tbl.Print()
 		}
 
