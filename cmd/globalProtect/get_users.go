@@ -127,20 +127,20 @@ Examples:
 
 		// Print statistics
 		if stats {
-			fmt.Printf("\nConnected Users:\n\n")
+			fmt.Fprintf(os.Stderr, "\nConnected Users:\n\n")
 			for _, k := range keys {
 				if k == "total" {
 					continue
 				}
-				fmt.Printf("%v: %v\n", k, userCount[k])
+				fmt.Fprintf(os.Stderr, "%v: %v\n", k, userCount[k])
 			}
-			fmt.Println()
-			fmt.Println("Total Connected Users:", userCount["total"])
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Total Connected Users:", userCount["total"])
 		}
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Printf("\n\n Completed in %.3f seconds\n", elapsed.Seconds())
+		fmt.Fprintf(os.Stderr, "\n\n Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 

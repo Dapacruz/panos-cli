@@ -197,7 +197,7 @@ Examples:
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Printf(" \n\nCompleted in %.3f seconds\n", elapsed.Seconds())
+		fmt.Fprintf(os.Stderr, " \n\nCompleted in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
