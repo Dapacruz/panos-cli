@@ -32,8 +32,8 @@ var (
 	terse           bool
 	connected       string
 	state           []string
-	model           []string
-	notModel        []string
+	modelPattern    []string
+	notModelPattern []string
 )
 
 // Create objects to colorize stdout
@@ -166,21 +166,22 @@ Examples:
 			tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 		}
 		firewallTags := getFirewallTags(cmd.Flags().Changed("user"))
+
 		for _, fw := range managedFirewalls.Firewalls {
 			switch {
-			case len(firewallPattern) > 0 && !findFirewall(fw.Name, firewallPattern):
+			case len(firewallPattern) > 0 && !match(firewallPattern, "", fw.Name):
 				continue
-			case cmd.Flags().Changed("tag") && !findTag(firewallTags[fw.Serial], tagPattern):
+			case cmd.Flags().Changed("tag") && !match(tagPattern, "", firewallTags[fw.Serial]...):
 				continue
-			case cmd.Flags().Changed("not-tag") && findTag(firewallTags[fw.Serial], notTagPattern):
+			case cmd.Flags().Changed("not-tag") && match(notTagPattern, "", firewallTags[fw.Serial]...):
 				continue
 			case cmd.Flags().Changed("connected") && (connected != fw.Connected):
 				continue
-			case cmd.Flags().Changed("state") && !contains(state, fw.HaState):
+			case cmd.Flags().Changed("state") && !contains(state, fw.HaState, ""):
 				continue
-			case cmd.Flags().Changed("model") && !modelContains(model, fw.Model):
+			case cmd.Flags().Changed("model") && !match(modelPattern, "pa-", fw.Model):
 				continue
-			case cmd.Flags().Changed("not-model") && modelContains(notModel, fw.Model):
+			case cmd.Flags().Changed("not-model") && match(notModelPattern, "pa-", fw.Model):
 				continue
 			default:
 				if !terse {
@@ -210,46 +211,26 @@ func init() {
 	getFirewallsCmd.Flags().BoolVar(&terse, "terse", false, "return managed firewall names only")
 	getFirewallsCmd.Flags().StringSliceVarP(&firewallPattern, "firewall", "f", []string{}, "return firewalls matching a comma separated set of name patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVarP(&state, "state", "s", []string{}, "return firewalls matching a comma separated set of states: active, passive, suspended, standalone")
-	getFirewallsCmd.Flags().StringSliceVar(&model, "model", []string{}, "return firewalls matching a comma separated set of models")
-	getFirewallsCmd.Flags().StringSliceVar(&notModel, "not-model", []string{}, "return firewalls not matching a comma separated set of models")
+	getFirewallsCmd.Flags().StringSliceVar(&modelPattern, "model", []string{}, "return firewalls matching a comma separated set of models")
+	getFirewallsCmd.Flags().StringSliceVar(&notModelPattern, "not-model", []string{}, "return firewalls not matching a comma separated set of models")
 	getFirewallsCmd.Flags().StringVarP(&connected, "connected", "c", "", "return firewalls matching connected state: yes, no")
 	getFirewallsCmd.Flags().StringSliceVarP(&tagPattern, "tag", "t", []string{}, "return firewalls matching a comma separated set of tag patterns (wildcards supported)")
 	getFirewallsCmd.Flags().StringSliceVar(&notTagPattern, "not-tag", []string{}, "return firewalls not matching a comma separated set of tag patterns (wildcards supported)")
 }
 
-func contains(slice []string, item string) bool {
-	set := make(map[string]struct{}, len(slice))
-	for _, s := range slice {
-		set[strings.ToLower(s)] = struct{}{}
+func contains(s []string, item, trim string) bool {
+	set := make(map[string]struct{}, len(s))
+	for _, s := range s {
+		set[strings.Trim(strings.ToLower(s), trim)] = struct{}{}
 	}
-
 	_, ok := set[strings.ToLower(item)]
 	return ok
 }
 
-func modelContains(slice []string, item string) bool {
-	set := make(map[string]struct{}, len(slice))
-	for _, s := range slice {
-		set[strings.TrimLeft(strings.ToLower(s), "pa-")] = struct{}{}
-	}
-
-	_, ok := set[strings.TrimLeft(strings.ToLower(item), "pa-")]
-	return ok
-}
-
-func findFirewall(fw string, patterns []string) bool {
-	for _, p := range patterns {
-		if m, _ := wildcard.Match(strings.TrimSpace(strings.ToLower(p)), strings.ToLower(fw)); m {
-			return true
-		}
-	}
-	return false
-}
-
-func findTag(tags []string, patterns []string) bool {
-	for _, t := range tags {
-		for _, p := range patterns {
-			if m, _ := wildcard.Match(strings.TrimSpace(strings.ToLower(p)), strings.ToLower(t)); m {
+func match(patns []string, trim string, item ...string) bool {
+	for _, i := range item {
+		for _, p := range patns {
+			if m, _ := wildcard.Match(strings.Trim(strings.TrimSpace(strings.ToLower(p)), trim), strings.Trim(strings.ToLower(i), trim)); m {
 				return true
 			}
 		}
