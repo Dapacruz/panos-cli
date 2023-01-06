@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -217,9 +218,17 @@ func printResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
 	for {
 		if session, chanIsOpen := <-ch; chanIsOpen {
 			green.Printf("\n*** %s ***\n\n\n", session.host)
-			for cmd, result := range session.results {
-				yellow.Printf("*** %s ***\n", cmd)
-				fmt.Printf("%s\n\n", trimOutput(result))
+
+			// Sort results by command
+			keys := make([]string, 0, len(session.results))
+			for k := range session.results {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			for _, k := range keys {
+				yellow.Printf("*** %s ***\n", k)
+				fmt.Printf("%s\n\n", trimOutput(session.results[k]))
 			}
 			blue.Printf("################################################################################\n\n\n")
 		} else {
