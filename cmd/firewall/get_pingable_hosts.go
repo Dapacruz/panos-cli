@@ -16,25 +16,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/go-ping/ping"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
-var (
-	user         string
-	password     string
-	numAddresses int
-	timeout      int
-)
-
-// Create objects to colorize stdout
-var (
-	green *color.Color = color.New(color.FgGreen)
-	red   *color.Color = color.New(color.FgRed)
-)
+var numAddresses int
 
 type addressSlice struct {
 	Addresses []address `xml:"result>entries>entry"`
@@ -91,6 +79,7 @@ Examples:
 
 		fmt.Fprintf(os.Stderr, "Downloading ARP cache from %v ... ", firewall)
 		data := getArpCache(firewall, userFlagSet)
+
 		var arpCache addressSlice
 		err := xml.Unmarshal([]byte(data), &arpCache)
 		if err != nil {
@@ -156,6 +145,7 @@ func getPingableAddresses(addrs []string) []string {
 
 		// Ping ip addr and add to pingableAddrs if a response is received
 		stats := pingAddr(addr)
+
 		if stats.PacketLoss == 0 {
 			pingableAddrs = append(pingableAddrs, addr)
 		}
@@ -187,6 +177,8 @@ func pingAddr(addr string) *ping.Statistics {
 	}
 
 	stats := pinger.Statistics()
+
+	fmt.Printf("%+v\n", stats)
 
 	return stats
 }

@@ -5,9 +5,9 @@ import (
 )
 
 // getCmd represents the get command
-var getCmd = &cobra.Command{
-	Use:   "get",
-	Short: "Get firewall information",
+var runCmd = &cobra.Command{
+	Use:   "run",
+	Short: "Run commands",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -15,5 +15,5 @@ var getCmd = &cobra.Command{
 }
 
 func init() {
-	firewallCmd.AddCommand(getCmd)
+	firewallCmd.AddCommand(runCmd)
 }

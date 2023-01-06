@@ -118,7 +118,10 @@ Examples:
   > panos-cli panorama get firewalls -u user
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr)
+		if !terse {
+			fmt.Fprintln(os.Stderr)
+		}
+
 		if viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
@@ -147,7 +150,9 @@ Examples:
 
 		start := time.Now()
 
-		fmt.Fprintf(os.Stderr, "Getting managed firewalls from %v ... ", panorama)
+		if !terse {
+			fmt.Fprintf(os.Stderr, "Getting managed firewalls from %v ... ", panorama)
+		}
 		resp := getFirewalls(userFlagSet)
 		var managedFirewalls firewallSlice
 		err := xml.Unmarshal([]byte(resp), &managedFirewalls)
@@ -155,7 +160,9 @@ Examples:
 			red.Fprintf(os.Stderr, "fail\n\n")
 			panic(err)
 		}
-		green.Fprintf(os.Stderr, "success\n\n")
+		if !terse {
+			green.Fprintf(os.Stderr, "success\n\n")
+		}
 
 		sort.Slice(managedFirewalls.Firewalls, func(i, j int) bool {
 			return managedFirewalls.Firewalls[i].Name < managedFirewalls.Firewalls[j].Name
@@ -216,7 +223,9 @@ Examples:
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " \n\nCompleted in %.3f seconds\n", elapsed.Seconds())
+		if !terse {
+			fmt.Fprintf(os.Stderr, " \n\nCompleted in %.3f seconds\n", elapsed.Seconds())
+		}
 	},
 }
 

@@ -297,9 +297,9 @@ func gatewayActive(gw, apikey string, userFlagSet bool) bool {
 	return false
 }
 
-func getConnectedUsers(gw, apikey string, queue chan<- userSlice, userFlagSet bool) {
+func getConnectedUsers(gw, apikey string, ch chan<- userSlice, userFlagSet bool) {
 	defer wg.Done()
 	if gatewayActive(gw, apikey, userFlagSet) {
-		queue <- queryGateway(gw, apikey, userFlagSet)
+		ch <- queryGateway(gw, apikey, userFlagSet)
 	}
 }
