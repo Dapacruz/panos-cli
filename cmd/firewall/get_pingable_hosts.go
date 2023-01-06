@@ -178,8 +178,6 @@ func pingAddr(addr string) *ping.Statistics {
 
 	stats := pinger.Statistics()
 
-	fmt.Printf("%+v\n", stats)
-
 	return stats
 }
 
