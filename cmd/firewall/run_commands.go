@@ -48,7 +48,7 @@ var runCommandsCmd = &cobra.Command{
 
 Examples:
   > panos-cli firewall run commands
-  panos-cli firewall run commands  -u user`,
+  > panos-cli firewall run commands  -u user`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr)
 		if len(cmds) == 0 {
@@ -108,13 +108,13 @@ Examples:
 
 		start := time.Now()
 
-		ch := make(chan sessionDetails, 100)
+		ch := make(chan sessionDetails, 10)
 		doneCh := make(chan struct{})
 
 		go printResults(ch, doneCh)
 
-		wg.Add(len(hosts))
 		for _, host := range hosts {
+			wg.Add(1)
 			go runCommands(ch, host)
 		}
 		wg.Wait()
@@ -123,7 +123,7 @@ Examples:
 
 		elapsed := time.Since(start)
 
-		fmt.Printf("\n Complete: %d command(s) executed on %d host(s) in %.3f seconds\n", len(cmds), len(hosts), elapsed.Seconds())
+		fmt.Printf(" Complete: %d command(s) executed on %d host(s) in %.3f seconds\n", len(cmds), len(hosts), elapsed.Seconds())
 	},
 }
 
@@ -180,34 +180,53 @@ func runCommands(ch chan<- sessionDetails, host string) {
 	}
 	defer e.Close()
 
+	// Wait for prompt after login
+	_, _, err = e.Expect(promptRE, sessionTimeout)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Set up session
-	e.Expect(promptRE, sessionTimeout)
-	e.Send(SESSION_SETUP + "\n")
-	_, _, _ = e.Expect(promptRE, sessionTimeout)
+	err = e.Send(SESSION_SETUP + "\n")
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, _, err = e.Expect(promptRE, sessionTimeout)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Execute commands
 	for _, cmd := range cmds {
-		e.Send(cmd + "\n")
-		result, _, _ := e.Expect(promptRE, sessionTimeout)
+		err = e.Send(cmd + "\n")
+		if err != nil {
+			log.Fatal(err)
+		}
+		result, _, err := e.Expect(promptRE, sessionTimeout)
+		if err != nil {
+			log.Fatal(err)
+		}
 		session.results[cmd] = result
 	}
-	e.Send("exit\n")
 
 	ch <- session
 }
 
 // printResults prints the results
 func printResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
-	for r := range ch {
-		green.Printf("\n*** %s ***\n\n\n", r.host)
-		for k, v := range r.results {
-			yellow.Printf("*** %s ***\n", k)
-			fmt.Printf("%s\n\n", trimOutput(v))
+	for {
+		if session, chanIsOpen := <-ch; chanIsOpen {
+			green.Printf("\n*** %s ***\n\n\n", session.host)
+			for cmd, result := range session.results {
+				yellow.Printf("*** %s ***\n", cmd)
+				fmt.Printf("%s\n\n", trimOutput(result))
+			}
+			blue.Printf("################################################################################\n\n\n")
+		} else {
+			doneCh <- struct{}{}
+			return
 		}
-		blue.Printf("################################################################################\n\n\n")
 	}
-
-	doneCh <- struct{}{}
 }
 
 // trimOutput removes the echoed command and the prompt from the output
