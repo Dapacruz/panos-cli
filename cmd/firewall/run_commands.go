@@ -230,7 +230,7 @@ func printResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
 				yellow.Printf("*** %s ***\n", k)
 				fmt.Printf("%s\n\n", trimOutput(session.results[k]))
 			}
-			blue.Printf("################################################################################\n\n\n")
+			blue.Printf("################################################################################\n\n")
 		} else {
 			doneCh <- struct{}{}
 			return
