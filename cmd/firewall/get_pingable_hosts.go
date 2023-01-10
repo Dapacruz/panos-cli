@@ -55,6 +55,7 @@ Examples:
 			firewall = args[0]
 		}
 
+		// If the user flag is not set or the user is not set, prompt for user
 		fmt.Fprintln(os.Stderr)
 		if viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")

@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -30,7 +29,6 @@ var (
 	port         string
 	keyBasedAuth bool
 	promptRE     = regexp.MustCompile(`>`)
-	wg           sync.WaitGroup
 	signer       ssh.Signer
 )
 
@@ -51,6 +49,7 @@ Examples:
   > panos-cli firewall run commands
   > panos-cli firewall run commands  -u user`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// If the cmds flag is not set, exit and display usage
 		fmt.Fprintln(os.Stderr)
 		if len(cmds) == 0 {
 			cmd.Help()
@@ -112,7 +111,7 @@ Examples:
 		ch := make(chan sessionDetails, 10)
 		doneCh := make(chan struct{})
 
-		go printResults(ch, doneCh)
+		go printCmdResults(ch, doneCh)
 
 		for _, host := range hosts {
 			wg.Add(1)
@@ -137,11 +136,6 @@ func init() {
 	runCommandsCmd.Flags().BoolVarP(&keyBasedAuth, "key-based-auth", "k", false, "use key-based authentication")
 	runCommandsCmd.Flags().StringVarP(&port, "port", "p", "22", "port to connect to on host")
 	runCommandsCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "timeout in seconds for each command")
-}
-
-func isInputFromPipe() bool {
-	fileInfo, _ := os.Stdin.Stat()
-	return fileInfo.Mode()&os.ModeCharDevice == 0
 }
 
 // runCommands executes commands on a host
@@ -213,8 +207,8 @@ func runCommands(ch chan<- sessionDetails, host string) {
 	ch <- session
 }
 
-// printResults prints the results
-func printResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
+// printCmdResults prints the results
+func printCmdResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
 	for {
 		if session, chanIsOpen := <-ch; chanIsOpen {
 			green.Printf("\n*** %s ***\n\n\n", session.host)

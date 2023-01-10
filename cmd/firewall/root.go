@@ -1,6 +1,9 @@
 package firewall
 
 import (
+	"os"
+	"sync"
+
 	"github.com/Dapacruz/panos-cli/cmd"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -10,6 +13,7 @@ var (
 	user     string
 	password string
 	timeout  int
+	wg       sync.WaitGroup
 )
 
 // Create objects to colorize stdout
@@ -32,4 +36,9 @@ var firewallCmd = &cobra.Command{
 
 func init() {
 	cmd.RootCmd.AddCommand(firewallCmd)
+}
+
+func isInputFromPipe() bool {
+	fileInfo, _ := os.Stdin.Stat()
+	return fileInfo.Mode()&os.ModeCharDevice == 0
 }
