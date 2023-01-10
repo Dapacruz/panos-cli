@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -20,16 +21,18 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
 )
 
 var (
-	hosts        []string
-	cmds         []string
-	port         string
-	keyBasedAuth bool
-	promptRE     = regexp.MustCompile(`>`)
-	signer       ssh.Signer
+	hosts         []string
+	cmds          []string
+	port          string
+	keyBasedAuth  bool
+	promptRE      = regexp.MustCompile(`>`)
+	signer        ssh.Signer
+	ignoreHostKey bool
 )
 
 const SESSION_SETUP = "set cli scripting-mode on"
@@ -136,6 +139,7 @@ func init() {
 	runCommandsCmd.Flags().BoolVarP(&keyBasedAuth, "key-based-auth", "k", false, "use key-based authentication")
 	runCommandsCmd.Flags().StringVarP(&port, "port", "p", "22", "port to connect to on host")
 	runCommandsCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "timeout in seconds for each command")
+	runCommandsCmd.Flags().BoolVarP(&ignoreHostKey, "insecure", "K", false, "ignore host key checking")
 }
 
 // runCommands executes commands on a host
@@ -156,12 +160,24 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		authMethod = ssh.Password(password)
 	}
 
+	// Set host key callback
+	var hostkeyCallback ssh.HostKeyCallback
+	if ignoreHostKey {
+		hostkeyCallback = ssh.InsecureIgnoreHostKey()
+	} else {
+		var err error
+		hostkeyCallback, err = knownhosts.New(path.Join(os.Getenv("HOME"), ".ssh", "known_hosts"))
+		if err != nil {
+			log.Fatalf("unable to load ssh known_hosts: %v", err)
+		}
+	}
+
 	// Connect to host
 	sshClt, err := ssh.Dial("tcp", net.JoinHostPort(host, port), &ssh.ClientConfig{
 		User: viper.GetString("user"),
 		Auth: []ssh.AuthMethod{authMethod},
 		// allow any host key to be used (non-prod)
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostkeyCallback,
 	})
 	if err != nil {
 		log.Fatalf("ssh.Dial(%q) failed: %v", host, err)

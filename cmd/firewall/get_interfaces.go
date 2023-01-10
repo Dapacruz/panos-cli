@@ -1,7 +1,5 @@
 package firewall
 
-// TODO: Handle interfaces that have more than one IP address
-
 import (
 	"bufio"
 	"crypto/tls"
@@ -266,11 +264,11 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 }
 
 func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobra.Command) {
-	// Print connected users
+	// Print interfaces
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
 
-	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Speed", "Duplex", "Status", "Mode", "State", "Virtual System", "VLAN", "Zone", "Comment")
+	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Status", "State", "Virtual System", "VLAN", "Zone", "Comment")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for fw := range ch {
@@ -315,7 +313,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			ints[i.Name].Comment = i.Comment
 			ints[i.Name].MTU = i.MTU
 
-			// TODO: Parse IP addresses from merged configuration
+			// TODO: Parse IP addresses from merged local/Panorama configurations
 			// addresses := []string{}
 			// for _, addrs := range i.IP {
 			// 	addresses = append(addresses, addrs.IP...)
@@ -330,6 +328,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 		}
 		sort.Strings(keys)
 
+		// Match one or more IP addresses, with or without slash notation
 		r := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?(, \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?)?$`)
 		for _, k := range keys {
 			switch {
@@ -340,7 +339,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			case hasIpAddress && !r.MatchString(ints[k].IP):
 				continue
 			}
-			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Speed, ints[k].Duplex, ints[k].Status, ints[k].Mode, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].Zone, ints[k].Comment)
+			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].Zone, ints[k].Comment)
 		}
 	}
 
