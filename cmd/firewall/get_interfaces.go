@@ -36,6 +36,7 @@ type interfaceSlice struct {
 	Firewall string
 	Network  []*interfaceNetwork  `xml:"result>ifnet>entry"`
 	Hardware []*interfaceHardware `xml:"result>hw>entry"`
+	Config   []*interfaceConfig   `xml:"result>network>interface>ethernet>entry"`
 }
 
 type interfaceNetwork struct {
@@ -57,10 +58,22 @@ type interfaceHardware struct {
 	Status string `xml:"st"`
 }
 
+type interfaceConfig struct {
+	Name    string         `xml:"name,attr"`
+	Comment string         `xml:"comment"`
+	MTU     string         `xml:"layer3>mtu"`
+	IP      []*ipAddresses `xml:"layer3>ip>entry"`
+}
+
+type ipAddresses struct {
+	IP []string `xml:"name,attr"`
+}
+
 type firewallInterface struct {
 	Firewall      string
 	Name          string
 	IP            string
+	MTU           string
 	MAC           string
 	Mode          string
 	Speed         string
@@ -72,6 +85,7 @@ type firewallInterface struct {
 	VLAN          string
 	Zone          string
 	VirtualSystem string
+	Comment       string
 }
 
 // getInterfacesCmd represents the getInterfaces command
@@ -172,6 +186,7 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 		panic(err)
 	}
 
+	// Get interface operational data
 	q := req.URL.Query()
 	q.Add("type", "op")
 	q.Add("cmd", "<show><interface>all</interface></show>")
@@ -195,15 +210,53 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 		log.Fatal(resp.Status)
 	}
 
-	defer resp.Body.Close()
-
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		red.Fprintf(os.Stderr, "fail\n\n")
 		panic(err)
 	}
 
+	resp.Body.Close()
+
 	interfaces := interfaceSlice{Firewall: fw}
+	err = xml.Unmarshal(respBody, &interfaces)
+	if err != nil {
+		panic(err)
+	}
+
+	// Get interface configuration data
+	q = req.URL.Query()
+	q.Add("type", "config")
+	q.Add("action", "show")
+	q.Add("xpath", "devices/entry/network")
+	if !userFlagSet && viper.GetString("apikey") != "" {
+		q.Add("key", viper.GetString("apikey"))
+	} else {
+		creds := fmt.Sprintf("%s:%s", user, password)
+		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
+		req.Header.Set("Authorization", fmt.Sprintf("Basic %s", credsEnc))
+	}
+
+	req.URL.RawQuery = q.Encode()
+
+	resp, err = client.Do(req)
+	if err != nil {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		panic(err)
+	}
+	if resp.StatusCode != 200 {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		log.Fatal(resp.Status)
+	}
+
+	respBody, err = io.ReadAll(resp.Body)
+	if err != nil {
+		red.Fprintf(os.Stderr, "fail\n\n")
+		panic(err)
+	}
+
+	resp.Body.Close()
+
 	err = xml.Unmarshal(respBody, &interfaces)
 	if err != nil {
 		panic(err)
@@ -217,10 +270,11 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
 
-	tbl := table.New("Firewall", "Name", "IP", "Type", "MAC", "Speed", "Duplex", "Status", "Mode", "State", "Virtual System", "VLAN", "Zone")
+	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Speed", "Duplex", "Status", "Mode", "State", "Virtual System", "VLAN", "Zone", "Comment")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for fw := range ch {
+		// Parse interface hardware data
 		ints := map[string]*firewallInterface{}
 		for _, i := range fw.Hardware {
 			ints[i.Name] = &firewallInterface{
@@ -234,6 +288,8 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 				State:    i.State,
 			}
 		}
+
+		// Interface network data
 		for _, i := range fw.Network {
 			i.VirtualSystem = fmt.Sprintf("vsys%s", i.VirtualSystem)
 			if i.VLAN == "0" {
@@ -251,6 +307,22 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			ints[i.Name].Zone = i.Zone
 		}
 
+		// Parse interface configuration data
+		for _, i := range fw.Config {
+			if _, ok := ints[i.Name]; !ok {
+				ints[i.Name] = &firewallInterface{}
+			}
+			ints[i.Name].Comment = i.Comment
+			ints[i.Name].MTU = i.MTU
+
+			// TODO: Parse IP addresses from merged configuration
+			// addresses := []string{}
+			// for _, addrs := range i.IP {
+			// 	addresses = append(addresses, addrs.IP...)
+			// }
+			// ints[i.Name].IP = strings.Join(addresses, "\n")
+		}
+
 		// Sort interfaces by name
 		var keys []string
 		for k := range ints {
@@ -258,7 +330,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 		}
 		sort.Strings(keys)
 
-		r := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?$`)
+		r := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?(, \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?)?$`)
 		for _, k := range keys {
 			switch {
 			case cmd.Flags().Changed("name") && !match(namePattern, "", ints[k].Name, "/", ""):
@@ -268,7 +340,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			case hasIpAddress && !r.MatchString(ints[k].IP):
 				continue
 			}
-			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].Type, ints[k].MAC, ints[k].Speed, ints[k].Duplex, ints[k].Status, ints[k].Mode, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].Zone)
+			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Speed, ints[k].Duplex, ints[k].Status, ints[k].Mode, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].Zone, ints[k].Comment)
 		}
 	}
 
