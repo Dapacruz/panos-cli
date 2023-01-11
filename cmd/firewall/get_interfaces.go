@@ -106,7 +106,7 @@ Examples:
     > panos-cli firewall get interfaces --has-ip --name "eth*","ae*" fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Ensure at least one host is specified
-		hosts = cmd.Flags().Args()
+		hosts := cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
 				if viper.GetString("apikey") == "" {
