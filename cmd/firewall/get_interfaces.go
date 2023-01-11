@@ -88,13 +88,22 @@ type firewallInterface struct {
 
 // getInterfacesCmd represents the getInterfaces command
 var getInterfacesCmd = &cobra.Command{
-	Use:   "interfaces [flags] <firewall> [<firewall> ...]",
+	Use:   "interfaces [flags] <firewall> [firewall]...",
 	Short: "Gets firewall interfaces",
 	Long: `Gets firewall interfaces
 
 Examples:
-  > panos-cli firewall get interfaces
-  > panos-cli firewall get interfaces  -u user`,
+  # Print all interfaces of 'fw01.example.com' and 'fw02.example.com':
+
+    > panos-cli firewall get interfaces fw01.example.com fw02.example.com
+
+  # Print interfaces of firewalls returned from the 'panos-cli panorama get firewalls' command:
+
+    > panos-cli panorama get firewalls --terse | panos-cli firewall get interfaces
+
+  # Print interfaces that have an IP address and the interface name begins with 'eth' or 'ae':
+
+    > panos-cli firewall get interfaces --has-ip --name "eth*","ae*" fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()

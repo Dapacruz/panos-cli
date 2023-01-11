@@ -16,7 +16,7 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "A set of commands for working with the config",
-	Long:  ``,
+	Long:  `A set of commands for working with the config`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
@@ -25,7 +25,7 @@ var configCmd = &cobra.Command{
 // listCmd represents the get command
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List config file",
+	Short: "Print config file path",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("\n%v\n", viper.GetViper().ConfigFileUsed())
@@ -35,7 +35,7 @@ var listCmd = &cobra.Command{
 // showCmd represents the get command
 var showCmd = &cobra.Command{
 	Use:   "show",
-	Short: "Show config file",
+	Short: "Print config file",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		file, err := os.Open(viper.ConfigFileUsed())
@@ -55,7 +55,7 @@ var showCmd = &cobra.Command{
 // editCmd represents the globalProtect command
 var editCmd = &cobra.Command{
 	Use:   "edit",
-	Short: "Edit config file",
+	Short: "Open config file in default editor",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := open.Run(viper.ConfigFileUsed())

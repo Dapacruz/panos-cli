@@ -44,13 +44,22 @@ type sessionDetails struct {
 
 // runCommandsCmd represents the runCommands command
 var runCommandsCmd = &cobra.Command{
-	Use:   "commands [flags] <firewall> [<firewall> ...]",
+	Use:   "commands [flags] <firewall> [firewall]...",
 	Short: "Executes CLI commands via SSH",
 	Long: `Executes CLI commands via SSH
 
 Examples:
-  > panos-cli firewall run commands
-  > panos-cli firewall run commands  -u user`,
+  # Execute the 'show system info' and 'show arp all' commands on fw01.example.com:
+
+    > panos-cli firewall run commands --command "show system info","show arp all" fw01.example.com
+
+  # Execute the 'show system info' command on fw01.example.com and fw02.example.com, use key based auth, and ignore host key verification:
+
+    > panos-cli firewall run commands --command "show system info" --key-based-auth --insecure fw01.example.com fw02.example.com
+
+  # Execute the 'show system info' command on all firewalls returned from the 'panos-cli panorama get firewalls' command:
+
+    > panos-cli panorama get firewalls --terse | panos-cli firewall run commands --command "show system info" --key-based-auth`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// If the cmds flag is not set, exit and display usage
 		fmt.Fprintln(os.Stderr)
@@ -135,7 +144,7 @@ func init() {
 
 	runCommandsCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	runCommandsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
-	runCommandsCmd.Flags().StringSliceVarP(&cmds, "commands", "c", cmds, "comma separated set of commands to execute")
+	runCommandsCmd.Flags().StringSliceVarP(&cmds, "command", "c", cmds, "comma separated set of commands to execute")
 	runCommandsCmd.Flags().BoolVarP(&keyBasedAuth, "key-based-auth", "k", false, "use key-based authentication")
 	runCommandsCmd.Flags().StringVarP(&port, "port", "p", "22", "port to connect to on host")
 	runCommandsCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "timeout in seconds for each command")

@@ -114,9 +114,21 @@ var getFirewallsCmd = &cobra.Command{
 	Long: `Get Panorama managed firewalls
 
 Examples:
-  > panos-cli panorama get firewalls
-  > panos-cli panorama get firewalls -u user
-`,
+  # Print all firewalls managed by the Panorama appliance in the config file:
+
+    > panos-cli panorama get firewalls
+
+  # Print all active/standalone firewalls managed by panorama.example.com:
+
+    > panos-cli panorama get firewalls --panorama panorama.example.com --state active,standalone
+
+  # Print all connected firewalls where the firewall name contains "ca" or "ny":
+
+    > panos-cli panorama get firewalls --connected yes --firewall "*ca*","*ny*"
+
+  # Print all firewall names to be piped to another command:
+
+    > panos-cli panorama get firewalls --terse`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if !terse {
 			fmt.Fprintln(os.Stderr)

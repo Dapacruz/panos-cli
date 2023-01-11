@@ -53,14 +53,22 @@ type conUser struct {
 
 // getUsersCmd represents the getUsers command
 var getUsersCmd = &cobra.Command{
-	Use:   "users",
-	Short: "Get connected users from all gateways",
-	Long: `Get connected users from all gateways
+	Use:   "users [flags] <gateway> [gateway]...",
+	Short: "Get connected users",
+	Long: `Get connected users
 
 Examples:
-  > panos-cli global-protect get users
-  > panos-cli global-protect get users -u user
-`,
+  # Print connected users on all gateways in the config file:
+
+    > panos-cli global-protect get users
+
+  # Print connected users on specified gateways and include stats:
+
+    > panos-cli global-protect get users --stats --gateways gw01.example.com,gw02.example.com
+
+  # Print connected users where the username contains 'doe':
+
+    > panos-cli global-protect get users --connected-user "*doe*"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no gateways are set by flag or config file, exit
 		cGateways := viper.GetStringMapStringSlice("global-protect")["gateways"]
