@@ -13,6 +13,7 @@ var (
 	user     string
 	password string
 	timeout  int
+	hosts    []string
 	wg       sync.WaitGroup
 )
 

@@ -26,7 +26,6 @@ import (
 )
 
 var (
-	hosts         []string
 	cmds          []string
 	port          string
 	keyBasedAuth  bool

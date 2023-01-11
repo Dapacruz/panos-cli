@@ -89,8 +89,8 @@ type firewallInterface struct {
 // getInterfacesCmd represents the getInterfaces command
 var getInterfacesCmd = &cobra.Command{
 	Use:   "interfaces [flags] <firewall> [firewall]...",
-	Short: "Gets firewall interfaces",
-	Long: `Gets firewall interfaces
+	Short: "Get firewall interfaces",
+	Long: `Get firewall interfaces
 
 Examples:
   # Print all interfaces of 'fw01.example.com' and 'fw02.example.com':
@@ -106,7 +106,7 @@ Examples:
     > panos-cli firewall get interfaces --has-ip --name "eth*","ae*" fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Ensure at least one host is specified
-		hosts := cmd.Flags().Args()
+		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
 				if viper.GetString("apikey") == "" {
