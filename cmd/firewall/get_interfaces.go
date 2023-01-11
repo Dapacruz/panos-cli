@@ -173,9 +173,9 @@ func init() {
 
 	getInterfacesCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	getInterfacesCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
-	getInterfacesCmd.Flags().StringSliceVarP(&namePattern, "name", "n", []string{}, "return interfaces matching a comma separated set of name patterns (wildcards supported)")
-	getInterfacesCmd.Flags().StringSliceVarP(&vsysPattern, "vsys", "v", []string{}, "return interfaces matching a comma separated set of vsys patterns (wildcards supported)")
-	getInterfacesCmd.Flags().BoolVarP(&hasIpAddress, "has-ip", "i", false, "return interfaces with an IP address")
+	getInterfacesCmd.Flags().StringSliceVarP(&namePattern, "name", "n", []string{}, "print interfaces matching a comma separated set of name patterns (wildcards supported)")
+	getInterfacesCmd.Flags().StringSliceVarP(&vsysPattern, "vsys", "v", []string{}, "print interfaces matching a comma separated set of vsys patterns (wildcards supported)")
+	getInterfacesCmd.Flags().BoolVarP(&hasIpAddress, "has-ip", "i", false, "print interfaces with an IP address")
 }
 
 func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
