@@ -31,10 +31,13 @@ var (
 )
 
 type interfaceSlice struct {
-	Firewall string
-	Network  []*interfaceNetwork  `xml:"result>ifnet>entry"`
-	Hardware []*interfaceHardware `xml:"result>hw>entry"`
-	Config   []*interfaceConfig   `xml:"result>network>interface>ethernet>entry"`
+	Firewall        string
+	Network         []*interfaceNetwork  `xml:"result>ifnet>entry"`
+	Hardware        []*interfaceHardware `xml:"result>hw>entry"`
+	EthernetConfig  []*interfaceConfig   `xml:"result>interface>ethernet>entry"`
+	AggregateConfig []*interfaceConfig   `xml:"result>interface>aggregate-ethernet>entry"`
+	LoopbackConfig  []*interfaceConfig   `xml:"result>interface>loopback>units>entry"`
+	TunnelConfig    []*interfaceConfig   `xml:"result>interface>tunnel>units>entry"`
 }
 
 type interfaceNetwork struct {
@@ -57,33 +60,37 @@ type interfaceHardware struct {
 }
 
 type interfaceConfig struct {
-	Name    string         `xml:"name,attr"`
-	Comment string         `xml:"comment"`
-	MTU     string         `xml:"layer3>mtu"`
-	IP      []*ipAddresses `xml:"layer3>ip>entry"`
+	Name           string             `xml:"name,attr"`
+	Comment        string             `xml:"comment"`
+	MTU            string             `xml:"layer3>mtu"`
+	AggregateGroup string             `xml:"aggregate-group"`
+	IP             []*ipAddresses     `xml:"ip>entry"`
+	Layer3IP       []*ipAddresses     `xml:"layer3>ip>entry"`
+	SubInterfaces  []*interfaceConfig `xml:"layer3>units>entry"`
 }
 
 type ipAddresses struct {
-	IP []string `xml:"name,attr"`
+	IP string `xml:"name,attr"`
 }
 
 type firewallInterface struct {
-	Firewall      string
-	Name          string
-	IP            string
-	MTU           string
-	MAC           string
-	Mode          string
-	Speed         string
-	Duplex        string
-	Status        string
-	State         string
-	ID            string
-	Type          string
-	VLAN          string
-	Zone          string
-	VirtualSystem string
-	Comment       string
+	Firewall       string
+	Name           string
+	IP             string
+	MTU            string
+	MAC            string
+	Mode           string
+	Speed          string
+	Duplex         string
+	Status         string
+	State          string
+	ID             string
+	Type           string
+	VLAN           string
+	AggregateGroup string
+	Zone           string
+	VirtualSystem  string
+	Comment        string
 }
 
 // getInterfacesCmd represents the getInterfaces command
@@ -234,8 +241,8 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 	// Get interface configuration data
 	q = req.URL.Query()
 	q.Add("type", "config")
-	q.Add("action", "show")
-	q.Add("xpath", "devices/entry/network")
+	q.Add("action", "get")
+	q.Add("xpath", "/config/devices/entry[@name='localhost.localdomain']/network/interface")
 	if !userFlagSet && viper.GetString("apikey") != "" {
 		q.Add("key", viper.GetString("apikey"))
 	} else {
@@ -277,7 +284,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
 
-	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Status", "State", "Virtual System", "VLAN", "Zone", "Comment")
+	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Status", "State", "Virtual System", "VLAN", "Aggregate Group", "Zone", "Comment")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for fw := range ch {
@@ -307,7 +314,6 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			}
 			ints[i.Name].Firewall = fw.Firewall
 			ints[i.Name].Name = i.Name
-			ints[i.Name].IP = i.IP
 			ints[i.Name].Type = i.Type
 			ints[i.Name].VirtualSystem = i.VirtualSystem
 			ints[i.Name].VLAN = i.VLAN
@@ -315,19 +321,45 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 		}
 
 		// Parse interface configuration data
-		for _, i := range fw.Config {
+		var configs []*interfaceConfig
+		configs = append(configs, fw.EthernetConfig...)
+		configs = append(configs, fw.AggregateConfig...)
+		configs = append(configs, fw.LoopbackConfig...)
+		configs = append(configs, fw.TunnelConfig...)
+		for _, i := range configs {
 			if _, ok := ints[i.Name]; !ok {
 				ints[i.Name] = &firewallInterface{}
 			}
 			ints[i.Name].Comment = i.Comment
+			ints[i.Name].AggregateGroup = i.AggregateGroup
 			ints[i.Name].MTU = i.MTU
 
-			// TODO: Parse IP addresses from merged local/Panorama configurations
-			// addresses := []string{}
-			// for _, addrs := range i.IP {
-			// 	addresses = append(addresses, addrs.IP...)
-			// }
-			// ints[i.Name].IP = strings.Join(addresses, "\n")
+			// Parse IP addresses from merged local/Panorama configurations
+			addresses := []string{}
+			var addrs []*ipAddresses
+			addrs = append(addrs, i.IP...)
+			addrs = append(addrs, i.Layer3IP...)
+			for _, addr := range addrs {
+				addresses = append(addresses, addr.IP)
+			}
+			ints[i.Name].IP = strings.Join(addresses, "\n")
+
+			// Parse sub interfaces
+			for _, si := range i.SubInterfaces {
+				if _, ok := ints[si.Name]; !ok {
+					ints[si.Name] = &firewallInterface{}
+				}
+				ints[si.Name].Comment = si.Comment
+
+				addresses := []string{}
+				var addrs []*ipAddresses
+				addrs = append(addrs, si.IP...)
+				addrs = append(addrs, si.Layer3IP...)
+				for _, addr := range addrs {
+					addresses = append(addresses, addr.IP)
+				}
+				ints[si.Name].IP = strings.Join(addresses, "\n")
+			}
 		}
 
 		// Sort interfaces by name
@@ -336,6 +368,19 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
+
+		// TODO: Sort interface numbers correctly
+		//sort.SliceStable(keys, func(i, j int) bool {
+		//iSplit := strings.Split(keys[i], ".")
+		//jSplit := strings.Split(keys[j], ".")
+		//if len(iSplit) < 2 {
+		//return true
+		//}
+		//if len(jSplit) < 2 {
+		//return true
+		//}
+		//return iSplit[1] < jSplit[1]
+		//})
 
 		// Match one or more IP addresses, with or without slash notation
 		r := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?(, \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?)?$`)
@@ -348,7 +393,7 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			case hasIpAddress && !r.MatchString(ints[k].IP):
 				continue
 			}
-			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].Zone, ints[k].Comment)
+			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].AggregateGroup, ints[k].Zone, ints[k].Comment)
 		}
 	}
 
