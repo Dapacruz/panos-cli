@@ -27,6 +27,7 @@ import (
 var (
 	namePattern  []string
 	vsysPattern  []string
+	aePattern    []string
 	hasIpAddress bool
 )
 
@@ -182,6 +183,7 @@ func init() {
 	getInterfacesCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getInterfacesCmd.Flags().StringSliceVarP(&namePattern, "name", "n", []string{}, "print interfaces matching a comma separated set of name patterns (wildcards supported)")
 	getInterfacesCmd.Flags().StringSliceVarP(&vsysPattern, "vsys", "v", []string{}, "print interfaces matching a comma separated set of vsys patterns (wildcards supported)")
+	getInterfacesCmd.Flags().StringSliceVarP(&aePattern, "aggregate-group", "a", []string{}, "print interfaces matching a comma separated set of aggregate-group patterns (wildcards supported)")
 	getInterfacesCmd.Flags().BoolVarP(&hasIpAddress, "has-ip", "i", false, "print interfaces with an IP address")
 }
 
@@ -389,6 +391,8 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 			case cmd.Flags().Changed("name") && !match(namePattern, "", ints[k].Name, "/", ""):
 				continue
 			case cmd.Flags().Changed("vsys") && !match(vsysPattern, "", ints[k].VirtualSystem):
+				continue
+			case cmd.Flags().Changed("aggregate-group") && !match(aePattern, "", ints[k].AggregateGroup) && !match(aePattern, "", ints[k].Name):
 				continue
 			case hasIpAddress && !r.MatchString(ints[k].IP):
 				continue
