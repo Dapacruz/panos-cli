@@ -223,7 +223,7 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 	}
 	if resp.StatusCode != 200 {
 		red.Fprintf(os.Stderr, "fail\n\n")
-		log.Fatal(resp.Status)
+		log.Fatalf("%s (%s)", resp.Status, fw)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)

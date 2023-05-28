@@ -12,6 +12,7 @@ panos-cli is wrtten in Go, enabling you to download a dependency free binary for
   - [panos-cli panorama get firewalls](#panos-cli-panorama-get-firewalls)
   - [panos-cli firewall get interfaces](#panos-cli-firewall-get-interfaces)
   - [panos-cli firewall get pingable-hosts](#panos-cli-firewall-get-pingable-hosts)
+  - [panos-cli firewall get object-limits](#panos-cli-firewall-get-object-limits)
   - [panos-cli firewall run commands](#panos-cli-firewall-run-commands-linux-and-macos-only)
   - [panos-cli global-protect get users](#panos-cli-global-protect-get-users)
 - [Installation](#installation)
@@ -38,17 +39,17 @@ Print all firewall names to be piped to another command:
 > panos-cli panorama get firewalls --terse
 ```
 ### *panos-cli firewall get interfaces*
-Print all interfaces of 'fw01.example.com' and 'fw02.example.com':
+Print all interfaces of fw01.example.com and fw02.example.com:
 ```sh
 > panos-cli firewall get interfaces fw01.example.com fw02.example.com
 ```
 
-Print interfaces of firewalls returned from the 'panos-cli panorama get firewalls' command:
+Print interfaces of firewalls returned from the `panos-cli panorama get firewalls` command:
 ```sh
 > panos-cli panorama get firewalls --terse | panos-cli firewall get interfaces
 ```
 
-Print interfaces that have an IP address and the interface name begins with 'eth' or 'ae':
+Print interfaces that have an IP address and the interface name begins with "eth" or "ae":
 ```sh
 > panos-cli firewall get interfaces --has-ip --name "eth*","ae*" fw01.example.com
 ```
@@ -63,18 +64,29 @@ Print four pingable addresses behind each interface on fw01.example.com and set 
 ```sh
 > panos-cli firewall get pingable-hosts --timeout 1000 --num-addrs 4 fw01.example.com
 ```
+### *panos-cli firewall get object-limits*
+
+Print object limits of fw01.example.com and fw02.example.com:
+```sh
+> panos-cli firewall get object-limits fw01.example.com fw02.example.com
+```
+
+Print object limits of firewalls returned from the panos-cli panorama get firewalls command:
+```sh
+> panos-cli panorama get firewalls --terse | panos-cli firewall get object-limits
+```
 ### *panos-cli firewall run commands* (Linux and macOS only)
-Execute the 'show system info' and 'show arp all' commands on fw01.example.com:
+Execute the `show system info` and `show arp all` commands on fw01.example.com:
 ```sh
 > panos-cli firewall run commands --command "show system info","show arp all" fw01.example.com
 ```
 
-Execute the 'show system info' command on fw01.example.com and fw02.example.com, use key based auth, and ignore host key verification:
+Execute the `show system info` command on fw01.example.com and fw02.example.com, use key based auth, and ignore host key verification:
 ```sh
 > panos-cli firewall run commands --command "show system info" --key-based-auth --insecure fw01.example.com fw02.example.com
 ```
 
-Execute the 'show system info' command on all firewalls returned from the 'panos-cli panorama get firewalls' command:
+Execute the `show system info` command on all firewalls returned from the `panos-cli panorama get firewalls` command:
 ```sh
 > panos-cli panorama get firewalls --terse | panos-cli firewall run commands --command "show system info" --key-based-auth
 ```
@@ -89,7 +101,7 @@ Print connected users on specified gateways and include stats:
 > panos-cli global-protect get users --stats --gateways gw01.example.com,gw02.example.com
 ```
 
-Print connected users where the username contains 'doe':
+Print connected users where the username contains "doe":
 ```sh
 > panos-cli global-protect get users --connected-user "*doe*"
 ```
