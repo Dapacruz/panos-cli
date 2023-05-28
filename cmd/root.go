@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VERSION           string = "0.9.4"
+	VERSION           string = "0.10.0"
 	VIPER_CONFIG_NAME string = ".panos-cli"
 	VIPER_CONFIG_PATH string = "$HOME"
 )
