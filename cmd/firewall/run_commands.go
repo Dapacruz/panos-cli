@@ -182,7 +182,7 @@ func runCommands(ch chan<- sessionDetails, host string) {
 
 	// Connect to host
 	sshClt, err := ssh.Dial("tcp", net.JoinHostPort(host, port), &ssh.ClientConfig{
-		User: viper.GetString("user"),
+		User: user,
 		Auth: []ssh.AuthMethod{authMethod},
 		// allow any host key to be used (non-prod)
 		HostKeyCallback: hostkeyCallback,
