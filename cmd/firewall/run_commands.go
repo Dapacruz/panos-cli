@@ -29,9 +29,11 @@ var (
 	cmds          []string
 	port          string
 	keyBasedAuth  bool
-	promptRE      = regexp.MustCompile(`>`)
+	passwordStdin bool
+	promptRE      = regexp.MustCompile(`>\s$|#\s$`)
 	signer        ssh.Signer
 	ignoreHostKey bool
+	sortOutput    bool
 )
 
 const SESSION_SETUP = "set cli scripting-mode on"
@@ -71,8 +73,8 @@ Examples:
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
-				if !keyBasedAuth {
-					log.Fatal("key based auth is required when reading hosts from stdin")
+				if !keyBasedAuth && viper.GetString("password") == "" && password == "" {
+					log.Fatal("key based auth or password flag is required when reading hosts from stdin")
 				}
 
 				// Read hosts from stdin
@@ -87,6 +89,21 @@ Examples:
 			}
 		}
 
+		// Retrieve password from standard input
+		if passwordStdin {
+			if isInputFromPipe() {
+				// Read password from stdin
+				scanner := bufio.NewScanner(bufio.NewReader(os.Stdin))
+				for scanner.Scan() {
+					password = scanner.Text()
+				}
+			} else {
+				cmd.Help()
+				fmt.Printf("\nunable to retrieve password from standard input\n")
+				os.Exit(1)
+			}
+		}
+
 		if !keyBasedAuth && viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
@@ -95,7 +112,7 @@ Examples:
 		}
 
 		// If the password flag is not set, prompt for password
-		if !keyBasedAuth && password == "" {
+		if !keyBasedAuth && viper.GetString("password") == "" && password == "" {
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(syscall.Stdin))
 			if err != nil {
@@ -103,6 +120,8 @@ Examples:
 			}
 			password = string(bytepw)
 			fmt.Fprintf(os.Stderr, "\n\n")
+		} else if password == "" {
+			password = viper.GetString("password")
 		}
 
 		if keyBasedAuth {
@@ -119,7 +138,7 @@ Examples:
 
 		start := time.Now()
 
-		ch := make(chan sessionDetails, 10)
+		ch := make(chan sessionDetails, 100)
 		doneCh := make(chan struct{})
 
 		go printCmdResults(ch, doneCh)
@@ -143,11 +162,14 @@ func init() {
 
 	runCommandsCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	runCommandsCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
+	runCommandsCmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "receive password from standard input")
 	runCommandsCmd.Flags().StringSliceVarP(&cmds, "command", "c", cmds, "comma separated set of commands to execute")
 	runCommandsCmd.Flags().BoolVarP(&keyBasedAuth, "key-based-auth", "k", false, "use key-based authentication")
 	runCommandsCmd.Flags().StringVarP(&port, "port", "p", "22", "port to connect to on host")
-	runCommandsCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "timeout in seconds for each command")
+	runCommandsCmd.Flags().IntVarP(&expectTimeout, "expect-timeout", "e", 30, "expect timeout in seconds for each command")
+	runCommandsCmd.Flags().IntVarP(&sshTimeout, "ssh-timeout", "S", 30, "SSH timeout in seconds")
 	runCommandsCmd.Flags().BoolVarP(&ignoreHostKey, "insecure", "K", false, "ignore host key checking")
+	runCommandsCmd.Flags().BoolVarP(&sortOutput, "sort-output", "s", false, "sort command output")
 }
 
 // runCommands executes commands on a host
@@ -158,7 +180,7 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		host:    host,
 		results: make(map[string]string),
 	}
-	sessionTimeout := time.Duration(timeout) * time.Second
+	expectTimeout := time.Duration(expectTimeout) * time.Second
 
 	// Set auth method
 	var authMethod ssh.AuthMethod
@@ -186,6 +208,7 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		Auth: []ssh.AuthMethod{authMethod},
 		// allow any host key to be used (non-prod)
 		HostKeyCallback: hostkeyCallback,
+		Timeout:         time.Duration(sshTimeout) * time.Second,
 	})
 	if err != nil {
 		log.Fatalf("ssh.Dial(%q) failed: %v", host, err)
@@ -193,16 +216,16 @@ func runCommands(ch chan<- sessionDetails, host string) {
 	defer sshClt.Close()
 
 	// Start SSH session
-	e, _, err := expect.SpawnSSH(sshClt, sessionTimeout)
+	e, _, err := expect.SpawnSSH(sshClt, expectTimeout)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%s: %v", host, err)
 	}
 	defer e.Close()
 
 	// Wait for prompt after login
-	_, _, err = e.Expect(promptRE, sessionTimeout)
+	_, _, err = e.Expect(promptRE, expectTimeout)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%s: %v", host, err)
 	}
 
 	// Set up session
@@ -210,9 +233,9 @@ func runCommands(ch chan<- sessionDetails, host string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, _, err = e.Expect(promptRE, sessionTimeout)
+	_, _, err = e.Expect(promptRE, expectTimeout)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%s: %v", host, err)
 	}
 
 	// Execute commands
@@ -221,9 +244,9 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		result, _, err := e.Expect(promptRE, sessionTimeout)
+		result, _, err := e.Expect(promptRE, expectTimeout)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("%s: %v", host, err)
 		}
 		session.results[cmd] = result
 	}
@@ -238,15 +261,13 @@ func printCmdResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
 			green.Printf("\n*** %s ***\n\n\n", session.host)
 
 			// Sort results by command
-			keys := make([]string, 0, len(session.results))
-			for k := range session.results {
-				keys = append(keys, k)
+			if sortOutput {
+				sort.Strings(cmds)
 			}
-			sort.Strings(keys)
 
-			for _, k := range keys {
-				yellow.Printf("*** %s ***\n", k)
-				fmt.Printf("%s\n\n", trimOutput(session.results[k]))
+			for _, cmd := range cmds {
+				yellow.Printf("*** %s ***\n", cmd)
+				fmt.Printf("%s\n\n", trimOutput(session.results[cmd]))
 			}
 			blue.Printf("################################################################################\n\n")
 		} else {
