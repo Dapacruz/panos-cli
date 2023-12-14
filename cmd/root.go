@@ -9,7 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/slices"
 )
+
+var noConfig bool
 
 const (
 	VERSION           string = "0.10.0"
@@ -35,6 +38,13 @@ func Execute() {
 }
 
 func init() {
+	RootCmd.PersistentFlags().BoolVar(&noConfig, "no-config", false, "bypass the configuration file")
+
+	// Bypass the config file if the --no-config flag is set
+	if slices.Contains(os.Args, "--no-config") {
+		return
+	}
+
 	viper.SetConfigName(VIPER_CONFIG_NAME)
 	viper.SetConfigType("yml")
 	viper.AddConfigPath(VIPER_CONFIG_PATH)
