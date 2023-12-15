@@ -10,13 +10,11 @@ import (
 )
 
 var (
-	user          string
-	password      string
-	timeout       int
-	expectTimeout int
-	sshTimeout    int
-	hosts         []string
-	wg            sync.WaitGroup
+	user     string
+	password string
+	timeout  int
+	hosts    []string
+	wg       sync.WaitGroup
 )
 
 // Create objects to colorize stdout

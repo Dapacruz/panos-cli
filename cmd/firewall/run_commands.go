@@ -34,6 +34,8 @@ var (
 	signer        ssh.Signer
 	ignoreHostKey bool
 	sortOutput    bool
+	expectTimeout int
+	sshTimeout    int
 )
 
 const SESSION_SETUP = "set cli scripting-mode on"
