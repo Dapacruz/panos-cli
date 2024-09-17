@@ -97,7 +97,7 @@ var getConfigXmlCmd = &cobra.Command{
 		ch := make(chan configuration, 10)
 		doneCh := make(chan struct{})
 
-		go printConfig(ch, doneCh)
+		go printConfigXml(ch, doneCh)
 
 		wg.Add(len(hosts))
 		for _, fw := range hosts {
@@ -184,7 +184,7 @@ func getConfigXml(ch chan<- configuration, fw string, userFlagSet bool, xpath st
 	ch <- config
 }
 
-func printConfig(ch <-chan configuration, doneCh chan<- struct{}) {
+func printConfigXml(ch <-chan configuration, doneCh chan<- struct{}) {
 	for {
 		if session, chanIsOpen := <-ch; chanIsOpen {
 			green.Printf("\n*** %s ***\n\n", session.Host)
