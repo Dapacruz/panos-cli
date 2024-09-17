@@ -37,7 +37,28 @@ type configuration struct {
 var getConfigXmlCmd = &cobra.Command{
 	Use:   "xml [flags] <firewall> [firewall]...",
 	Short: "Get firewall XML formatted config",
-	Long:  ``,
+	Long: `Get firewall XML formatted config
+
+Examples:
+  # Print running configuration of 'fw01.example.com' and 'fw02.example.com':
+
+    > panos-cli firewall get config xml fw01.example.com fw02.example.com
+
+  # Print running configuration of firewalls returned from the 'panos-cli panorama get firewalls' command:
+
+    > panos-cli panorama get firewalls --terse | panos-cli firewall get config xml
+
+  # Print running configuration at specified XPath:
+
+    > panos-cli firewall get config xml --xpath 'mgt-config' fw01.example.com
+
+  # Print effective running configuration at specified XPath:
+
+    > panos-cli firewall get config xml --type 'effective-running' --xpath 'mgt-config' fw01.example.com
+
+  # Print running and candidate configuration differences:
+
+    > panos-cli firewall get config xml --type 'diff' fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()

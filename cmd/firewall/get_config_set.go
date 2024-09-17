@@ -25,7 +25,20 @@ var configFilter string
 var getConfigSetCmd = &cobra.Command{
 	Use:   "set [flags] <firewall> [firewall]...",
 	Short: "Get firewall set formatted config",
-	Long:  ``,
+	Long: `Get firewall set formatted config
+
+Examples:
+  # Print set configuration of 'fw01.example.com' and 'fw02.example.com':
+
+    > panos-cli firewall get config set fw01.example.com fw02.example.com
+
+  # Print set configuration of firewalls returned from the 'panos-cli panorama get firewalls' command:
+
+    > panos-cli panorama get firewalls --terse | panos-cli firewall get config set --key-based-auth
+
+  # Print set configuration and filter for 'mgt-config':
+
+    > panos-cli firewall get config set --filter 'mgt-config' fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr)
 		hosts = cmd.Flags().Args()

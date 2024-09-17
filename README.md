@@ -13,6 +13,8 @@ panos-cli is wrtten in Go, enabling you to download a dependency free binary for
   - [panos-cli firewall get interfaces](#panos-cli-firewall-get-interfaces)
   - [panos-cli firewall get pingable-hosts](#panos-cli-firewall-get-pingable-hosts)
   - [panos-cli firewall get object-limits](#panos-cli-firewall-get-object-limits)
+  - [panos-cli firewall get config set](#panos-cli-firewall-get-config-set-linux-and-macos-only)
+  - [panos-cli firewall get config xml](#panos-cli-firewall-get-config-xml)
   - [panos-cli firewall run commands](#panos-cli-firewall-run-commands-linux-and-macos-only)
   - [panos-cli global-protect get users](#panos-cli-global-protect-get-users)
 - [Installation](#installation)
@@ -74,6 +76,48 @@ Print object limits of fw01.example.com and fw02.example.com:
 Print object limits of firewalls returned from the panos-cli panorama get firewalls command:
 ```sh
 > panos-cli panorama get firewalls --terse | panos-cli firewall get object-limits
+```
+### *panos-cli firewall get config set* (Linux and macOS only)
+
+Print set configuration of fw01.example.com and fw02.example.com:
+```sh
+> panos-cli firewall get config set fw01.example.com fw02.example.com
+```
+
+Print set configuration of firewalls returned from the "panos-cli panorama get firewalls" command:
+```sh
+> panos-cli panorama get firewalls --terse | panos-cli firewall get config set --key-based-auth
+```
+
+Print set configuration and filter for "mgt-config":
+```sh
+> panos-cli firewall get config set --filter "mgt-config" fw01.example.com
+```
+### *panos-cli firewall get config xml*
+
+Print running configuration of fw01.example.com and fw02.example.com:
+```sh
+> panos-cli firewall get config xml fw01.example.com fw02.example.com
+```
+
+Print running configuration of firewalls returned from the "panos-cli panorama get firewalls" command:
+```sh
+> panos-cli panorama get firewalls --terse | panos-cli firewall get config xml
+```
+
+Print running configuration at specified XPath:
+```sh
+> panos-cli firewall get config xml --xpath "mgt-config" fw01.example.com
+```
+
+Print effective running configuration at specified XPath:
+```sh
+> panos-cli firewall get config xml --type "effective-running" --xpath "mgt-config" fw01.example.com
+```
+
+Print running and candidate configuration differences:
+```sh
+> panos-cli firewall get config xml --type "diff" fw01.example.com
 ```
 ### *panos-cli firewall run commands* (Linux and macOS only)
 Execute the `show system info` and `show arp all` commands on fw01.example.com:
