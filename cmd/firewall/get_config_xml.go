@@ -53,11 +53,7 @@ Examples:
 
   # Print effective running configuration at specified XPath:
 
-    > panos-cli firewall get config xml --type 'effective-running' --xpath 'mgt-config' fw01.example.com
-
-  # Print running and candidate configuration differences:
-
-    > panos-cli firewall get config xml --type 'diff' fw01.example.com`,
+    > panos-cli firewall get config xml --type 'effective-running' --xpath 'mgt-config' fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()
@@ -79,7 +75,7 @@ Examples:
 			}
 		}
 
-		if !slices.Contains([]string{"candidate", "diff", "effective-running", "merged", "pushed-shared-policy", "pushed-template", "running", "synced", "synced-diff"}, configType) {
+		if !slices.Contains([]string{"candidate", "effective-running", "merged", "pushed-shared-policy", "pushed-template", "running", "synced", "synced-diff"}, configType) {
 			cmd.Help()
 			fmt.Printf("\ninvalid configuration type\n")
 			os.Exit(1)
@@ -146,7 +142,7 @@ func init() {
 	getConfigXmlCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
 	getConfigXmlCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getConfigXmlCmd.Flags().StringVarP(&xpath, "xpath", "x", ".", "xpath of the node to retrieve (for use with configuration types 'effective-running' and 'running')")
-	getConfigXmlCmd.Flags().StringVarP(&configType, "type", "t", "running", "type of configuration to retrieve (candidate, diff, effective-running, merged, pushed-shared-policy, pushed-template, running, synced, synced-diff)")
+	getConfigXmlCmd.Flags().StringVarP(&configType, "type", "t", "running", "type of configuration to retrieve (candidate, effective-running, merged, pushed-shared-policy, pushed-template, running, synced, synced-diff)")
 }
 
 func getConfigXml(ch chan<- configuration, fw string, userFlagSet bool, xpath string) {

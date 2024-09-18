@@ -114,11 +114,6 @@ Print effective running configuration at specified XPath:
 ```sh
 > panos-cli firewall get config xml --type "effective-running" --xpath "mgt-config" fw01.example.com
 ```
-
-Print running and candidate configuration differences:
-```sh
-> panos-cli firewall get config xml --type "diff" fw01.example.com
-```
 ### *panos-cli firewall run commands* (Linux and macOS only)
 Execute the `show system info` and `show arp all` commands on fw01.example.com:
 ```sh
