@@ -13,7 +13,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-ping/ping"
@@ -71,11 +70,17 @@ Examples:
 		// If the user flag is set, or the password and apikey are not set, prompt for password
 		userFlagSet := cmd.Flags().Changed("user")
 		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
+			tty, err := os.Open("/dev/tty")
+			if err != nil {
+				log.Fatal(err, "error allocating terminal")
+			}
+			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
-			bytepw, err := term.ReadPassword(int(syscall.Stdin))
+			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
 				panic(err)
 			}
+			tty.Close()
 			password = string(bytepw)
 			fmt.Fprintf(os.Stderr, "\n\n")
 		}

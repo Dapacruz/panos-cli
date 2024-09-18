@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	expect "github.com/google/goexpect"
@@ -75,10 +74,6 @@ Examples:
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
-				if !keyBasedAuth && viper.GetString("password") == "" && password == "" {
-					log.Fatal("key based auth or password flag is required when reading hosts from stdin")
-				}
-
 				// Read hosts from stdin
 				scanner := bufio.NewScanner(bufio.NewReader(os.Stdin))
 				for scanner.Scan() {
@@ -115,13 +110,19 @@ Examples:
 
 		// If the password flag is not set, prompt for password
 		if !keyBasedAuth && viper.GetString("password") == "" && password == "" {
-			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
-			bytepw, err := term.ReadPassword(int(syscall.Stdin))
+			tty, err := os.Open("/dev/tty")
 			if err != nil {
-				panic(err)
+				log.Fatal(err, "error allocating terminal")
 			}
-			password = string(bytepw)
+			fd := int(tty.Fd())
+			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
+			bytepw, err := term.ReadPassword(int(fd))
+			if err != nil {
+				log.Fatal(err)
+			}
+			tty.Close()
 			fmt.Fprintf(os.Stderr, "\n\n")
+			password = string(bytepw)
 		} else if password == "" {
 			password = viper.GetString("password")
 		}
@@ -134,7 +135,26 @@ Examples:
 
 			signer, err = ssh.ParsePrivateKey(file)
 			if err != nil {
-				log.Fatal(err)
+				if err.Error() == "ssh: this private key is passphrase protected" {
+					tty, err := os.Open("/dev/tty")
+					if err != nil {
+						log.Fatal(err, "error allocating terminal")
+					}
+					fd := int(tty.Fd())
+					fmt.Fprintf(os.Stderr, "SSH Private Key Passphrase: ")
+					passphrase, err := term.ReadPassword(fd)
+					if err != nil {
+						log.Fatal(err)
+					}
+					tty.Close()
+					fmt.Fprintf(os.Stderr, "\n\n")
+					signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
+					if err != nil {
+						log.Fatal(err)
+					}
+				} else {
+					log.Fatal(err)
+				}
 			}
 		}
 

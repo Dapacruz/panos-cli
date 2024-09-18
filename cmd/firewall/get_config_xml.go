@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -104,11 +103,17 @@ Examples:
 		// If the user flag is set, or the password and apikey are not set, prompt for password
 		userFlagSet := cmd.Flags().Changed("user")
 		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
+			tty, err := os.Open("/dev/tty")
+			if err != nil {
+				log.Fatal(err, "error allocating terminal")
+			}
+			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
-			bytepw, err := term.ReadPassword(int(syscall.Stdin))
+			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
 				panic(err)
 			}
+			tty.Close()
 			password = string(bytepw)
 			fmt.Fprintf(os.Stderr, "\n\n")
 		}
@@ -138,6 +143,8 @@ Examples:
 func init() {
 	getConfigCmd.AddCommand(getConfigXmlCmd)
 
+	getConfigXmlCmd.Flags().StringVar(&user, "user", user, "PAN admin user")
+	getConfigXmlCmd.Flags().StringVar(&password, "password", password, "password for PAN user")
 	getConfigXmlCmd.Flags().StringVarP(&xpath, "xpath", "x", ".", "xpath of the node to retrieve (for use with configuration types 'effective-running' and 'running')")
 	getConfigXmlCmd.Flags().StringVarP(&configType, "type", "t", "running", "type of configuration to retrieve (candidate, diff, effective-running, merged, pushed-shared-policy, pushed-template, running, synced, synced-diff)")
 }
