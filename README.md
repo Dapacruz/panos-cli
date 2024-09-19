@@ -4,7 +4,7 @@
 ![Go Report](https://goreportcard.com/badge/github.com/Dapacruz/panos-cli)
 ![Downloads](https://img.shields.io/github/downloads/Dapacruz/panos-cli/total)
 
-A lightweight utility, that utilizes the PAN-OS API, for working with Palo Alto Networks Panorama and firewalls.<br />
+A lightweight multithreaded utility, that utilizes the PAN-OS API, for working with Palo Alto Networks Panorama and firewalls.<br />
 
 panos-cli is wrtten in Go, enabling you to download a dependency free binary for your platform.<br /><br />
 
