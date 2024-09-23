@@ -144,7 +144,7 @@ Examples:
 
 		// Print statistics
 		if stats {
-			fmt.Fprintf(os.Stderr, "\nConnected Users per gateway:\n\n")
+			log.Printf("\nConnected Users per gateway:\n\n")
 			for _, k := range keys {
 				if k == "total" {
 					continue
