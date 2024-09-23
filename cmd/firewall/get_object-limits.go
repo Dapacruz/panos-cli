@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -32,6 +33,7 @@ type objectLimits struct {
 	PbfPolicyRule objectLimit
 	NatPolicyRule objectLimit
 	QosPolicyRule objectLimit
+	Error         string
 }
 
 type objectLimit struct {
@@ -56,12 +58,14 @@ Examples:
 
   > panos-cli panorama get firewalls --terse | panos-cli firewall get object-limits`,
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Println()
+
 		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
 				if viper.GetString("apikey") == "" {
-					log.Fatal("api key based auth is required when reading hosts from stdin, execute `panos-cli config edit` to add an api key")
+					log.Fatalf("api key based auth is required when reading hosts from stdin, execute `panos-cli config edit` to add an api key\n\n")
 				}
 
 				// Read hosts from stdin
@@ -71,13 +75,11 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nno hosts specified\n")
-				os.Exit(1)
+				log.Fatalf("\nno hosts specified\n\n")
 			}
 		}
 
 		// If the user flag is not set or the user is not set, prompt for user
-		fmt.Fprintln(os.Stderr)
 		if viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
@@ -90,25 +92,26 @@ Examples:
 		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
 			tty, err := os.Open("/dev/tty")
 			if err != nil {
-				log.Fatal(err, "error allocating terminal")
+				log.Fatalf("error allocating terminal\n\n")
 			}
 			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
-				panic(err)
+				log.Fatalf("%v\n\n", err)
 			}
 			tty.Close()
 			password = string(bytepw)
-			fmt.Fprintf(os.Stderr, "\n\n")
+			log.Printf("\n\n")
 		}
 
 		start := time.Now()
 
+		var errorBuffer bytes.Buffer
 		ch := make(chan objectLimits, 10)
 		doneCh := make(chan struct{})
 
-		go printObjectLimits(ch, doneCh, cmd)
+		go printObjectLimits(ch, &errorBuffer, doneCh)
 
 		wg.Add(len(hosts))
 		for _, fw := range hosts {
@@ -117,11 +120,17 @@ Examples:
 		wg.Wait()
 		close(ch)
 		<-doneCh
-		fmt.Fprintln(os.Stderr)
+
+		// Print errors
+		if errorBuffer.String() != "" {
+			log.Printf("\n%s\n", errorBuffer.String())
+		} else {
+			log.Printf("\n\n")
+		}
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " Completed in %.3f seconds\n", elapsed.Seconds())
+		log.Printf(" Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
@@ -135,6 +144,11 @@ func init() {
 func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 	defer wg.Done()
 
+	objLimits := objectLimits{Firewall: fw}
+	defer func() {
+		ch <- objLimits
+	}()
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -143,8 +157,8 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 	url := fmt.Sprintf("https://%s/api/", fw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		objLimits.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	// Get interface operational data
@@ -163,8 +177,8 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		objLimits.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 	if resp.StatusCode != 200 {
 		red.Fprintf(os.Stderr, "fail\n\n")
@@ -173,8 +187,8 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		objLimits.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	resp.Body.Close()
@@ -199,9 +213,6 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 		limitMap[object] = limit
 	}
 
-	// TEST
-	// fmt.Println(limitMap)
-
 	// Get firewall configuration
 	q = req.URL.Query()
 	q.Add("type", "op")
@@ -218,8 +229,8 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 
 	resp, err = client.Do(req)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		objLimits.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 	if resp.StatusCode != 200 {
 		red.Fprintf(os.Stderr, "fail\n\n")
@@ -228,14 +239,11 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 
 	respBody, err = io.ReadAll(resp.Body)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		objLimits.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	resp.Body.Close()
-
-	// TEST
-	// fmt.Println(string(respBody))
 
 	// Get current object counts
 	doc, _ := xmlquery.Parse(strings.NewReader(string(respBody)))
@@ -249,71 +257,58 @@ func getObjectLimits(ch chan<- objectLimits, fw string, userFlagSet bool) {
 	usedMap["pbf-policy-rule"] = int64(len(xmlquery.Find(doc, "//pbf/rules/entry")))
 	usedMap["qos-policy-rule"] = int64(len(xmlquery.Find(doc, "//qos/rules/entry")))
 
-	// TEST
-	// fmt.Println(addressCount, addressGroupCount, serviceCount, serviceGroupCount, securityPolicyCount, natPolicyCount, qosPolicyCount, pbfPolicyCount)
-	// os.Exit(0)
-
 	// Populate a struct with the data
-	objLimits := objectLimits{
-		Firewall: fw,
-		Address: objectLimit{
-			Limit:       limitMap["address"],
-			Used:        usedMap["address"],
-			Remaining:   limitMap["address"] - usedMap["address"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["address"])/float64(limitMap["address"])*100)),
-		},
-		AddressGroup: objectLimit{
-			Limit:       limitMap["address-group"],
-			Used:        usedMap["address-group"],
-			Remaining:   limitMap["address-group"] - usedMap["address-group"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["address-group"])/float64(limitMap["address-group"])*100)),
-		},
-		Service: objectLimit{
-			Limit:       limitMap["service"],
-			Used:        usedMap["service"],
-			Remaining:   limitMap["service"] - usedMap["service"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["service"])/float64(limitMap["service"])*100)),
-		},
-		ServiceGroup: objectLimit{
-			Limit:       limitMap["service-group"],
-			Used:        usedMap["service-group"],
-			Remaining:   limitMap["service-group"] - usedMap["service-group"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["service-group"])/float64(limitMap["service-group"])*100)),
-		},
-		PolicyRule: objectLimit{
-			Limit:       limitMap["policy-rule"],
-			Used:        usedMap["policy-rule"],
-			Remaining:   limitMap["policy-rule"] - usedMap["policy-rule"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["policy-rule"])/float64(limitMap["policy-rule"])*100)),
-		},
-		NatPolicyRule: objectLimit{
-			Limit:       limitMap["nat-policy-rule"],
-			Used:        usedMap["nat-policy-rule"],
-			Remaining:   limitMap["nat-policy-rule"] - usedMap["nat-policy-rule"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["nat-policy-rule"])/float64(limitMap["nat-policy-rule"])*100)),
-		},
-		PbfPolicyRule: objectLimit{
-			Limit:       limitMap["pbf-policy-rule"],
-			Used:        usedMap["pbf-policy-rule"],
-			Remaining:   limitMap["pbf-policy-rule"] - usedMap["pbf-policy-rule"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["pbf-policy-rule"])/float64(limitMap["pbf-policy-rule"])*100)),
-		},
-		QosPolicyRule: objectLimit{
-			Limit:       limitMap["qos-policy-rule"],
-			Used:        usedMap["qos-policy-rule"],
-			Remaining:   limitMap["qos-policy-rule"] - usedMap["qos-policy-rule"],
-			PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["qos-policy-rule"])/float64(limitMap["qos-policy-rule"])*100)),
-		},
+	objLimits.Address = objectLimit{
+		Limit:       limitMap["address"],
+		Used:        usedMap["address"],
+		Remaining:   limitMap["address"] - usedMap["address"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["address"])/float64(limitMap["address"])*100)),
 	}
-
-	// TEST
-	// fmt.Printf("%+v\n", objLimits)
-	// os.Exit(0)
-
-	ch <- objLimits
+	objLimits.AddressGroup = objectLimit{
+		Limit:       limitMap["address-group"],
+		Used:        usedMap["address-group"],
+		Remaining:   limitMap["address-group"] - usedMap["address-group"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["address-group"])/float64(limitMap["address-group"])*100)),
+	}
+	objLimits.Service = objectLimit{
+		Limit:       limitMap["service"],
+		Used:        usedMap["service"],
+		Remaining:   limitMap["service"] - usedMap["service"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["service"])/float64(limitMap["service"])*100)),
+	}
+	objLimits.ServiceGroup = objectLimit{
+		Limit:       limitMap["service-group"],
+		Used:        usedMap["service-group"],
+		Remaining:   limitMap["service-group"] - usedMap["service-group"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["service-group"])/float64(limitMap["service-group"])*100)),
+	}
+	objLimits.PolicyRule = objectLimit{
+		Limit:       limitMap["policy-rule"],
+		Used:        usedMap["policy-rule"],
+		Remaining:   limitMap["policy-rule"] - usedMap["policy-rule"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["policy-rule"])/float64(limitMap["policy-rule"])*100)),
+	}
+	objLimits.NatPolicyRule = objectLimit{
+		Limit:       limitMap["nat-policy-rule"],
+		Used:        usedMap["nat-policy-rule"],
+		Remaining:   limitMap["nat-policy-rule"] - usedMap["nat-policy-rule"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["nat-policy-rule"])/float64(limitMap["nat-policy-rule"])*100)),
+	}
+	objLimits.PbfPolicyRule = objectLimit{
+		Limit:       limitMap["pbf-policy-rule"],
+		Used:        usedMap["pbf-policy-rule"],
+		Remaining:   limitMap["pbf-policy-rule"] - usedMap["pbf-policy-rule"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["pbf-policy-rule"])/float64(limitMap["pbf-policy-rule"])*100)),
+	}
+	objLimits.QosPolicyRule = objectLimit{
+		Limit:       limitMap["qos-policy-rule"],
+		Used:        usedMap["qos-policy-rule"],
+		Remaining:   limitMap["qos-policy-rule"] - usedMap["qos-policy-rule"],
+		PercentUsed: fmt.Sprintf("%d%%", int64(float64(usedMap["qos-policy-rule"])/float64(limitMap["qos-policy-rule"])*100)),
+	}
 }
 
-func printObjectLimits(ch <-chan objectLimits, doneCh chan<- struct{}, cmd *cobra.Command) {
+func printObjectLimits(ch <-chan objectLimits, error *bytes.Buffer, done chan<- struct{}) {
 	// Print interfaces
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
@@ -322,17 +317,21 @@ func printObjectLimits(ch <-chan objectLimits, doneCh chan<- struct{}, cmd *cobr
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for fw := range ch {
-		tbl.AddRow(fw.Firewall, "Address", fw.Address.Limit, fw.Address.Used, fw.Address.Remaining, fw.Address.PercentUsed)
-		tbl.AddRow(fw.Firewall, "Address Group", fw.AddressGroup.Limit, fw.AddressGroup.Used, fw.AddressGroup.Remaining, fw.AddressGroup.PercentUsed)
-		tbl.AddRow(fw.Firewall, "Service", fw.Service.Limit, fw.Service.Used, fw.Service.Remaining, fw.Service.PercentUsed)
-		tbl.AddRow(fw.Firewall, "Service Group", fw.ServiceGroup.Limit, fw.ServiceGroup.Used, fw.ServiceGroup.Remaining, fw.ServiceGroup.PercentUsed)
-		tbl.AddRow(fw.Firewall, "Security Policy", fw.PolicyRule.Limit, fw.PolicyRule.Used, fw.PolicyRule.Remaining, fw.PolicyRule.PercentUsed)
-		tbl.AddRow(fw.Firewall, "PBF Policy", fw.PbfPolicyRule.Limit, fw.PbfPolicyRule.Used, fw.PbfPolicyRule.Remaining, fw.PbfPolicyRule.PercentUsed)
-		tbl.AddRow(fw.Firewall, "NAT Policy", fw.NatPolicyRule.Limit, fw.NatPolicyRule.Used, fw.NatPolicyRule.Remaining, fw.NatPolicyRule.PercentUsed)
-		tbl.AddRow(fw.Firewall, "QoS Policy", fw.QosPolicyRule.Limit, fw.QosPolicyRule.Used, fw.QosPolicyRule.Remaining, fw.QosPolicyRule.PercentUsed)
+		if fw.Error != "" {
+			error.WriteString(fw.Error)
+		} else {
+			tbl.AddRow(fw.Firewall, "Address", fw.Address.Limit, fw.Address.Used, fw.Address.Remaining, fw.Address.PercentUsed)
+			tbl.AddRow(fw.Firewall, "Address Group", fw.AddressGroup.Limit, fw.AddressGroup.Used, fw.AddressGroup.Remaining, fw.AddressGroup.PercentUsed)
+			tbl.AddRow(fw.Firewall, "Service", fw.Service.Limit, fw.Service.Used, fw.Service.Remaining, fw.Service.PercentUsed)
+			tbl.AddRow(fw.Firewall, "Service Group", fw.ServiceGroup.Limit, fw.ServiceGroup.Used, fw.ServiceGroup.Remaining, fw.ServiceGroup.PercentUsed)
+			tbl.AddRow(fw.Firewall, "Security Policy", fw.PolicyRule.Limit, fw.PolicyRule.Used, fw.PolicyRule.Remaining, fw.PolicyRule.PercentUsed)
+			tbl.AddRow(fw.Firewall, "PBF Policy", fw.PbfPolicyRule.Limit, fw.PbfPolicyRule.Used, fw.PbfPolicyRule.Remaining, fw.PbfPolicyRule.PercentUsed)
+			tbl.AddRow(fw.Firewall, "NAT Policy", fw.NatPolicyRule.Limit, fw.NatPolicyRule.Used, fw.NatPolicyRule.Remaining, fw.NatPolicyRule.PercentUsed)
+			tbl.AddRow(fw.Firewall, "QoS Policy", fw.QosPolicyRule.Limit, fw.QosPolicyRule.Used, fw.QosPolicyRule.Remaining, fw.QosPolicyRule.PercentUsed)
+		}
 	}
 
 	tbl.Print()
 
-	doneCh <- struct{}{}
+	done <- struct{}{}
 }

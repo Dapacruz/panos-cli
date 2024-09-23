@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// globalProtectCmd represents the globalProtect command
+// configCmd represents the config command
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "A set of commands for working with the config",
@@ -22,7 +22,7 @@ var configCmd = &cobra.Command{
 	},
 }
 
-// listCmd represents the get command
+// listCmd represents the list command
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Print config file path",
@@ -32,15 +32,17 @@ var listCmd = &cobra.Command{
 	},
 }
 
-// showCmd represents the get command
+// showCmd represents the show command
 var showCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Print config file",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Println()
+
 		file, err := os.Open(viper.ConfigFileUsed())
 		if err != nil {
-			panic(err)
+			log.Fatalf("%v\n\n", err)
 		}
 		defer file.Close()
 
@@ -52,7 +54,7 @@ var showCmd = &cobra.Command{
 	},
 }
 
-// editCmd represents the globalProtect command
+// editCmd represents the edit command
 var editCmd = &cobra.Command{
 	Use:   "edit",
 	Short: "Open config file in default editor",

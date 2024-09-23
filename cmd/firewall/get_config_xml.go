@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/xml"
@@ -30,6 +31,7 @@ type innerXML struct {
 type configuration struct {
 	Host   string
 	Config innerXML `xml:"result"`
+	Error  string
 }
 
 // getConfigXmlCmd represents the 'config xml' command
@@ -55,12 +57,14 @@ Examples:
 
     > panos-cli firewall get config xml --type 'effective-running' --xpath 'mgt-config' fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Println()
+
 		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
 				if viper.GetString("apikey") == "" {
-					log.Fatal("api key based auth is required when reading hosts from stdin, execute `panos-cli config edit` to add an api key")
+					log.Fatalf("api key based auth is required when reading hosts from stdin, execute `panos-cli config edit` to add an api key\n\n")
 				}
 
 				// Read hosts from stdin
@@ -70,27 +74,23 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nno hosts specified\n")
-				os.Exit(1)
+				log.Fatalf("\nno hosts specified\n\n")
 			}
 		}
 
 		if !slices.Contains([]string{"candidate", "effective-running", "merged", "pushed-shared-policy", "pushed-template", "running", "synced", "synced-diff"}, configType) {
 			cmd.Help()
-			fmt.Printf("\ninvalid configuration type\n")
-			os.Exit(1)
+			log.Fatalf("\ninvalid configuration type\n\n")
 		}
 
 		if !slices.Contains([]string{"effective-running", "running"}, configType) && xpath != "." {
 			cmd.Help()
-			fmt.Printf("\nxpath should only be used with configuration types 'effective-running' and 'running'\n")
-			os.Exit(1)
+			log.Fatalf("\nxpath should only be used with configuration types 'effective-running' and 'running'\n\n")
 		}
 
 		// If the user flag is not set or the user is not set, prompt for user
-		fmt.Fprintln(os.Stderr)
 		if viper.GetString("user") == "" && user == "" {
-			fmt.Fprint(os.Stderr, "PAN User: ")
+			fmt.Fprintf(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
 		} else if user == "" {
 			user = viper.GetString("user")
@@ -101,25 +101,26 @@ Examples:
 		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
 			tty, err := os.Open("/dev/tty")
 			if err != nil {
-				log.Fatal(err, "error allocating terminal")
+				log.Fatalf("error allocating terminal: %v\n\n", err)
 			}
 			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
-				panic(err)
+				log.Fatalf("%v\n\n", err)
 			}
 			tty.Close()
 			password = string(bytepw)
-			fmt.Fprintf(os.Stderr, "\n\n")
+			log.Printf("\n\n")
 		}
 
 		start := time.Now()
 
+		var errorBuffer bytes.Buffer
 		ch := make(chan configuration, 10)
 		doneCh := make(chan struct{})
 
-		go printConfigXml(ch, doneCh)
+		go printConfigXml(ch, &errorBuffer, doneCh)
 
 		wg.Add(len(hosts))
 		for _, fw := range hosts {
@@ -128,11 +129,13 @@ Examples:
 		wg.Wait()
 		close(ch)
 		<-doneCh
-		fmt.Fprintln(os.Stderr)
+
+		// Print errors
+		log.Println(errorBuffer.String())
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " Completed in %.3f seconds\n", elapsed.Seconds())
+		log.Printf(" Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
@@ -147,6 +150,11 @@ func init() {
 
 func getConfigXml(ch chan<- configuration, fw string, userFlagSet bool, xpath string) {
 	defer wg.Done()
+
+	config := configuration{Host: fw}
+	defer func() {
+		ch <- config
+	}()
 
 	var cmd string
 	if slices.Contains([]string{"effective-running", "running"}, configType) {
@@ -163,8 +171,8 @@ func getConfigXml(ch chan<- configuration, fw string, userFlagSet bool, xpath st
 	url := fmt.Sprintf("https://%s/api/", fw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		config.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	// Get configuration
@@ -183,40 +191,38 @@ func getConfigXml(ch chan<- configuration, fw string, userFlagSet bool, xpath st
 
 	resp, err := client.Do(req)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		config.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 	if resp.StatusCode != 200 {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		log.Fatalf("%s (%s)", resp.Status, fw)
+		config.Error = fmt.Sprintf("%s: response status code: %s\n\n", fw, resp.Status)
+		return
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		config.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	resp.Body.Close()
 
-	config := configuration{Host: fw}
 	err = xml.Unmarshal(respBody, &config)
 	if err != nil {
-		panic(err)
+		config.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
-
-	ch <- config
 }
 
-func printConfigXml(ch <-chan configuration, doneCh chan<- struct{}) {
-	for {
-		if session, chanIsOpen := <-ch; chanIsOpen {
+func printConfigXml(ch <-chan configuration, error *bytes.Buffer, done chan<- struct{}) {
+	for session := range ch {
+		if session.Error != "" {
+			error.WriteString(session.Error)
+		} else {
 			green.Printf("\n*** %s ***\n\n", session.Host)
 			fmt.Printf("%s\n\n", session.Config.InnerXML)
 			blue.Printf("################################################################################\n\n")
-		} else {
-			doneCh <- struct{}{}
-			return
 		}
 	}
+	done <- struct{}{} // Notify when done
 }

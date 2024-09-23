@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/xml"
@@ -38,6 +39,7 @@ type interfaceSlice struct {
 	AggregateConfig []*interfaceConfig   `xml:"result>interface>aggregate-ethernet>entry"`
 	LoopbackConfig  []*interfaceConfig   `xml:"result>interface>loopback>units>entry"`
 	TunnelConfig    []*interfaceConfig   `xml:"result>interface>tunnel>units>entry"`
+	Error           string
 }
 
 type interfaceNetwork struct {
@@ -112,12 +114,14 @@ Examples:
 
     > panos-cli firewall get interfaces --has-ip --name "eth*","ae*" fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Println()
+
 		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
 				if viper.GetString("apikey") == "" {
-					log.Fatal("api key based auth is required when reading hosts from stdin, execute `panos-cli config edit` to add an api key")
+					log.Fatalf("api key based auth is required when reading hosts from stdin, execute `panos-cli config edit` to add an api key\n\n")
 				}
 
 				// Read hosts from stdin
@@ -127,13 +131,11 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nno hosts specified\n")
-				os.Exit(1)
+				log.Fatalf("\nno hosts specified\n\n")
 			}
 		}
 
 		// If the user flag is not set or the user is not set, prompt for user
-		fmt.Fprintln(os.Stderr)
 		if viper.GetString("user") == "" && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
@@ -146,25 +148,26 @@ Examples:
 		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
 			tty, err := os.Open("/dev/tty")
 			if err != nil {
-				log.Fatal(err, "error allocating terminal")
+				log.Fatalf("error allocating terminal: %v\n\n", err)
 			}
 			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
-				panic(err)
+				log.Fatalf("%v\n\n", err)
 			}
 			tty.Close()
 			password = string(bytepw)
-			fmt.Fprintf(os.Stderr, "\n\n")
+			log.Printf("\n\n")
 		}
 
 		start := time.Now()
 
+		var errorBuffer bytes.Buffer
 		ch := make(chan interfaceSlice, 10)
 		doneCh := make(chan struct{})
 
-		go printInterfaces(ch, doneCh, cmd)
+		go printInterfaces(ch, &errorBuffer, doneCh, cmd)
 
 		wg.Add(len(hosts))
 		for _, fw := range hosts {
@@ -173,11 +176,17 @@ Examples:
 		wg.Wait()
 		close(ch)
 		<-doneCh
-		fmt.Fprintln(os.Stderr)
+
+		log.Println()
+
+		// Print errors
+		if errorBuffer.String() != "" {
+			log.Printf("%s", errorBuffer.String())
+		}
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " Completed in %.3f seconds\n", elapsed.Seconds())
+		log.Printf("\n Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
@@ -195,6 +204,11 @@ func init() {
 func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 	defer wg.Done()
 
+	interfaces := interfaceSlice{Firewall: fw}
+	defer func() {
+		ch <- interfaces
+	}()
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -203,8 +217,8 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 	url := fmt.Sprintf("https://%s/api/", fw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	// Get interface operational data
@@ -223,8 +237,8 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 	if resp.StatusCode != 200 {
 		red.Fprintf(os.Stderr, "fail\n\n")
@@ -233,16 +247,16 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	resp.Body.Close()
 
-	interfaces := interfaceSlice{Firewall: fw}
 	err = xml.Unmarshal(respBody, &interfaces)
 	if err != nil {
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	// Get interface configuration data
@@ -262,31 +276,30 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 
 	resp, err = client.Do(req)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 	if resp.StatusCode != 200 {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		log.Fatal(resp.Status)
+		interfaces.Error = fmt.Sprintf("%s: response status code: %s\n\n", fw, resp.Status)
+		return
 	}
 
 	respBody, err = io.ReadAll(resp.Body)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
 
 	resp.Body.Close()
 
 	err = xml.Unmarshal(respBody, &interfaces)
 	if err != nil {
-		panic(err)
+		interfaces.Error = fmt.Sprintf("%s: %v\n\n", fw, err)
+		return
 	}
-
-	ch <- interfaces
 }
 
-func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobra.Command) {
+func printInterfaces(ch <-chan interfaceSlice, error *bytes.Buffer, done chan<- struct{}, cmd *cobra.Command) {
 	// Print interfaces
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
@@ -295,120 +308,125 @@ func printInterfaces(ch <-chan interfaceSlice, doneCh chan<- struct{}, cmd *cobr
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for fw := range ch {
-		// Parse interface hardware data
-		ints := map[string]*firewallInterface{}
-		for _, i := range fw.Hardware {
-			ints[i.Name] = &firewallInterface{
-				Firewall: fw.Firewall,
-				Name:     i.Name,
-				MAC:      i.MAC,
-				Speed:    i.Speed,
-				Duplex:   i.Duplex,
-				Status:   i.Status,
-				Mode:     i.Mode,
-				State:    i.State,
-			}
-		}
+		if fw.Error != "" {
+			error.WriteString(fw.Error)
+		} else {
 
-		// Interface network data
-		for _, i := range fw.Network {
-			i.VirtualSystem = fmt.Sprintf("vsys%s", i.VirtualSystem)
-			if i.VLAN == "0" {
-				i.VLAN = ""
-			}
-			if _, ok := ints[i.Name]; !ok {
-				ints[i.Name] = &firewallInterface{}
-			}
-			ints[i.Name].Firewall = fw.Firewall
-			ints[i.Name].Name = i.Name
-			ints[i.Name].Type = i.Type
-			ints[i.Name].VirtualSystem = i.VirtualSystem
-			ints[i.Name].VLAN = i.VLAN
-			ints[i.Name].Zone = i.Zone
-		}
-
-		// Parse interface configuration data
-		var configs []*interfaceConfig
-		configs = append(configs, fw.EthernetConfig...)
-		configs = append(configs, fw.AggregateConfig...)
-		configs = append(configs, fw.LoopbackConfig...)
-		configs = append(configs, fw.TunnelConfig...)
-		for _, i := range configs {
-			if _, ok := ints[i.Name]; !ok {
-				ints[i.Name] = &firewallInterface{}
-			}
-			ints[i.Name].Comment = i.Comment
-			ints[i.Name].AggregateGroup = i.AggregateGroup
-			ints[i.Name].MTU = i.MTU
-
-			// Parse IP addresses from merged local/Panorama configurations
-			addresses := []string{}
-			var addrs []*ipAddresses
-			addrs = append(addrs, i.IP...)
-			addrs = append(addrs, i.Layer3IP...)
-			for _, addr := range addrs {
-				addresses = append(addresses, addr.IP)
-			}
-			ints[i.Name].IP = strings.Join(addresses, "\n")
-
-			// Parse sub interfaces
-			for _, si := range i.SubInterfaces {
-				if _, ok := ints[si.Name]; !ok {
-					ints[si.Name] = &firewallInterface{}
+			// Parse interface hardware data
+			ints := map[string]*firewallInterface{}
+			for _, i := range fw.Hardware {
+				ints[i.Name] = &firewallInterface{
+					Firewall: fw.Firewall,
+					Name:     i.Name,
+					MAC:      i.MAC,
+					Speed:    i.Speed,
+					Duplex:   i.Duplex,
+					Status:   i.Status,
+					Mode:     i.Mode,
+					State:    i.State,
 				}
-				ints[si.Name].Comment = si.Comment
+			}
 
+			// Interface network data
+			for _, i := range fw.Network {
+				i.VirtualSystem = fmt.Sprintf("vsys%s", i.VirtualSystem)
+				if i.VLAN == "0" {
+					i.VLAN = ""
+				}
+				if _, ok := ints[i.Name]; !ok {
+					ints[i.Name] = &firewallInterface{}
+				}
+				ints[i.Name].Firewall = fw.Firewall
+				ints[i.Name].Name = i.Name
+				ints[i.Name].Type = i.Type
+				ints[i.Name].VirtualSystem = i.VirtualSystem
+				ints[i.Name].VLAN = i.VLAN
+				ints[i.Name].Zone = i.Zone
+			}
+
+			// Parse interface configuration data
+			var configs []*interfaceConfig
+			configs = append(configs, fw.EthernetConfig...)
+			configs = append(configs, fw.AggregateConfig...)
+			configs = append(configs, fw.LoopbackConfig...)
+			configs = append(configs, fw.TunnelConfig...)
+			for _, i := range configs {
+				if _, ok := ints[i.Name]; !ok {
+					ints[i.Name] = &firewallInterface{}
+				}
+				ints[i.Name].Comment = i.Comment
+				ints[i.Name].AggregateGroup = i.AggregateGroup
+				ints[i.Name].MTU = i.MTU
+
+				// Parse IP addresses from merged local/Panorama configurations
 				addresses := []string{}
 				var addrs []*ipAddresses
-				addrs = append(addrs, si.IP...)
-				addrs = append(addrs, si.Layer3IP...)
+				addrs = append(addrs, i.IP...)
+				addrs = append(addrs, i.Layer3IP...)
 				for _, addr := range addrs {
 					addresses = append(addresses, addr.IP)
 				}
-				ints[si.Name].IP = strings.Join(addresses, "\n")
+				ints[i.Name].IP = strings.Join(addresses, "\n")
+
+				// Parse sub interfaces
+				for _, si := range i.SubInterfaces {
+					if _, ok := ints[si.Name]; !ok {
+						ints[si.Name] = &firewallInterface{}
+					}
+					ints[si.Name].Comment = si.Comment
+
+					addresses := []string{}
+					var addrs []*ipAddresses
+					addrs = append(addrs, si.IP...)
+					addrs = append(addrs, si.Layer3IP...)
+					for _, addr := range addrs {
+						addresses = append(addresses, addr.IP)
+					}
+					ints[si.Name].IP = strings.Join(addresses, "\n")
+				}
 			}
-		}
 
-		// Sort interfaces by name
-		var keys []string
-		for k := range ints {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		// TODO: Sort interface numbers correctly
-		//sort.SliceStable(keys, func(i, j int) bool {
-		//iSplit := strings.Split(keys[i], ".")
-		//jSplit := strings.Split(keys[j], ".")
-		//if len(iSplit) < 2 {
-		//return true
-		//}
-		//if len(jSplit) < 2 {
-		//return true
-		//}
-		//return iSplit[1] < jSplit[1]
-		//})
-
-		// Match one or more IP addresses, with or without slash notation
-		r := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?(, \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?)?$`)
-		for _, k := range keys {
-			switch {
-			case cmd.Flags().Changed("name") && !match(namePattern, "", ints[k].Name, "/", ""):
-				continue
-			case cmd.Flags().Changed("vsys") && !match(vsysPattern, "", ints[k].VirtualSystem):
-				continue
-			case cmd.Flags().Changed("aggregate-group") && !match(aePattern, "", ints[k].AggregateGroup) && !match(aePattern, "", ints[k].Name):
-				continue
-			case hasIpAddress && !r.MatchString(ints[k].IP):
-				continue
+			// Sort interfaces by name
+			var keys []string
+			for k := range ints {
+				keys = append(keys, k)
 			}
-			tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].AggregateGroup, ints[k].Zone, ints[k].Comment)
+			sort.Strings(keys)
+
+			// TODO: Sort interface numbers correctly
+			//sort.SliceStable(keys, func(i, j int) bool {
+			//iSplit := strings.Split(keys[i], ".")
+			//jSplit := strings.Split(keys[j], ".")
+			//if len(iSplit) < 2 {
+			//return true
+			//}
+			//if len(jSplit) < 2 {
+			//return true
+			//}
+			//return iSplit[1] < jSplit[1]
+			//})
+
+			// Match one or more IP addresses, with or without slash notation
+			r := regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?(, \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{2})?)?$`)
+			for _, k := range keys {
+				switch {
+				case cmd.Flags().Changed("name") && !match(namePattern, "", ints[k].Name, "/", ""):
+					continue
+				case cmd.Flags().Changed("vsys") && !match(vsysPattern, "", ints[k].VirtualSystem):
+					continue
+				case cmd.Flags().Changed("aggregate-group") && !match(aePattern, "", ints[k].AggregateGroup) && !match(aePattern, "", ints[k].Name):
+					continue
+				case hasIpAddress && !r.MatchString(ints[k].IP):
+					continue
+				}
+				tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].AggregateGroup, ints[k].Zone, ints[k].Comment)
+			}
 		}
 	}
 
 	tbl.Print()
 
-	doneCh <- struct{}{}
+	done <- struct{}{}
 }
 
 func match(patns []string, trim string, item ...string) bool {

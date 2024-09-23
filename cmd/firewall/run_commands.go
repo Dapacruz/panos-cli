@@ -5,6 +5,7 @@ package firewall
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -42,6 +43,7 @@ const SESSION_SETUP = "set cli scripting-mode on"
 type sessionDetails struct {
 	host    string
 	results map[string]string
+	error   string
 }
 
 // runCommandsCmd represents the runCommands command
@@ -63,14 +65,9 @@ Examples:
 
     > panos-cli panorama get firewalls --terse | panos-cli firewall run commands --command "show system info" --key-based-auth`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// If the cmds flag is not set, exit and display usage
-		fmt.Fprintln(os.Stderr)
-		if len(cmds) == 0 {
-			cmd.Help()
-			fmt.Printf("\nno commands specified\n")
-			os.Exit(1)
-		}
+		log.Println()
 
+		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
@@ -81,9 +78,14 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nno hosts specified\n")
-				os.Exit(1)
+				log.Fatalf("\nno hosts specified\n\n")
 			}
+		}
+
+		// If the cmds flag is not set, exit and display usage
+		if len(cmds) == 0 {
+			cmd.Help()
+			log.Fatalf("\nno commands specified\n\n")
 		}
 
 		// Retrieve password from standard input
@@ -96,8 +98,7 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nunable to retrieve password from standard input\n")
-				os.Exit(1)
+				log.Fatalf("unable to retrieve password from standard input\n\n")
 			}
 		}
 
@@ -121,8 +122,8 @@ Examples:
 				log.Fatal(err)
 			}
 			tty.Close()
-			fmt.Fprintf(os.Stderr, "\n\n")
 			password = string(bytepw)
+			log.Printf("\n\n")
 		} else if password == "" {
 			password = viper.GetString("password")
 		}
@@ -130,7 +131,7 @@ Examples:
 		if keyBasedAuth {
 			file, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".ssh", "id_rsa"))
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalf("%v\n\n", err)
 			}
 
 			signer, err = ssh.ParsePrivateKey(file)
@@ -147,23 +148,24 @@ Examples:
 						log.Fatal(err)
 					}
 					tty.Close()
-					fmt.Fprintf(os.Stderr, "\n\n")
+					log.Printf("\n\n")
 					signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
 					if err != nil {
-						log.Fatal(err)
+						log.Fatalf("%v\n\n", err)
 					}
 				} else {
-					log.Fatal(err)
+					log.Fatalf("%v\n\n", err)
 				}
 			}
 		}
 
 		start := time.Now()
 
+		var errorBuffer bytes.Buffer
 		ch := make(chan sessionDetails, 100)
 		doneCh := make(chan struct{})
 
-		go printCmdResults(ch, doneCh)
+		go printCmdResults(ch, &errorBuffer, doneCh)
 
 		for _, host := range hosts {
 			wg.Add(1)
@@ -173,9 +175,12 @@ Examples:
 		close(ch)
 		<-doneCh
 
-		elapsed := time.Since(start)
+		// Print errors
+		log.Println(errorBuffer.String())
 
-		fmt.Printf(" Complete: %d command(s) executed on %d host(s) in %.3f seconds\n", len(cmds), len(hosts), elapsed.Seconds())
+		// Print summary
+		elapsed := time.Since(start)
+		log.Printf(" Complete: %d command(s) executed on %d host(s) in %.3f seconds\n", len(cmds), len(hosts), elapsed.Seconds())
 	},
 }
 
@@ -202,6 +207,10 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		host:    host,
 		results: make(map[string]string),
 	}
+	defer func() {
+		ch <- session
+	}()
+
 	expectTimeout := time.Duration(expectTimeout) * time.Second
 
 	// Set auth method
@@ -220,7 +229,8 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		var err error
 		hostkeyCallback, err = knownhosts.New(path.Join(os.Getenv("HOME"), ".ssh", "known_hosts"))
 		if err != nil {
-			log.Fatalf("unable to load ssh known_hosts: %v", err)
+			session.error = fmt.Sprintf("unable to load ssh known_hosts: %v", err)
+			return
 		}
 	}
 
@@ -233,53 +243,60 @@ func runCommands(ch chan<- sessionDetails, host string) {
 		Timeout:         time.Duration(sshTimeout) * time.Second,
 	})
 	if err != nil {
-		log.Fatalf("ssh.Dial(%q) failed: %v", host, err)
+		session.error = fmt.Sprintf("%s: %v\n\n", host, err)
+		return
 	}
 	defer sshClt.Close()
 
 	// Start SSH session
 	e, _, err := expect.SpawnSSH(sshClt, expectTimeout)
 	if err != nil {
-		log.Fatalf("%s: %v", host, err)
+		session.error = fmt.Sprintf("%s: %v", host, err)
+		return
 	}
 	defer e.Close()
 
 	// Wait for prompt after login
 	_, _, err = e.Expect(promptRE, expectTimeout)
 	if err != nil {
-		log.Fatalf("%s: %v", host, err)
+		session.error = fmt.Sprintf("%s: %v", host, err)
+		return
 	}
 
 	// Set up session
 	err = e.Send(SESSION_SETUP + "\n")
 	if err != nil {
-		log.Fatal(err)
+		session.error = fmt.Sprint(err)
+		return
 	}
 	_, _, err = e.Expect(promptRE, expectTimeout)
 	if err != nil {
-		log.Fatalf("%s: %v", host, err)
+		session.error = fmt.Sprintf("%s: %v", host, err)
+		return
 	}
 
 	// Execute commands
 	for _, cmd := range cmds {
 		err = e.Send(cmd + "\n")
 		if err != nil {
-			log.Fatal(err)
+			session.error = fmt.Sprint(err)
+			return
 		}
 		result, _, err := e.Expect(promptRE, expectTimeout)
 		if err != nil {
-			log.Fatalf("%s: %v", host, err)
+			session.error = fmt.Sprintf("%s: %v", host, err)
+			return
 		}
 		session.results[cmd] = result
 	}
-
-	ch <- session
 }
 
 // printCmdResults prints the results
-func printCmdResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
-	for {
-		if session, chanIsOpen := <-ch; chanIsOpen {
+func printCmdResults(ch <-chan sessionDetails, error *bytes.Buffer, done chan<- struct{}) {
+	for session := range ch {
+		if session.error != "" {
+			error.WriteString(session.error)
+		} else {
 			green.Printf("\n*** %s ***\n\n\n", session.host)
 
 			// Sort results by command
@@ -292,11 +309,9 @@ func printCmdResults(ch <-chan sessionDetails, doneCh chan<- struct{}) {
 				fmt.Printf("%s\n\n", trimOutput(session.results[cmd]))
 			}
 			blue.Printf("################################################################################\n\n")
-		} else {
-			doneCh <- struct{}{}
-			return
 		}
 	}
+	done <- struct{}{} // Notify when done
 }
 
 // trimOutput removes the echoed command and the prompt from the output

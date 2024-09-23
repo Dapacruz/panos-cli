@@ -5,6 +5,7 @@ package firewall
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -39,7 +40,9 @@ Examples:
 
     > panos-cli firewall get config set --filter 'mgt-config' fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(os.Stderr)
+		log.Println()
+
+		// Ensure at least one host is specified
 		hosts = cmd.Flags().Args()
 		if len(hosts) == 0 {
 			if isInputFromPipe() {
@@ -50,8 +53,7 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nno hosts specified\n")
-				os.Exit(1)
+				log.Fatalf("\nno hosts specified\n\n")
 			}
 		}
 
@@ -65,8 +67,7 @@ Examples:
 				}
 			} else {
 				cmd.Help()
-				fmt.Printf("\nunable to retrieve password from standard input\n")
-				os.Exit(1)
+				log.Fatalf("\nunable to retrieve password from standard input\n\n")
 			}
 		}
 
@@ -81,17 +82,17 @@ Examples:
 		if !keyBasedAuth && viper.GetString("password") == "" && password == "" {
 			tty, err := os.Open("/dev/tty")
 			if err != nil {
-				log.Fatal(err, "error allocating terminal")
+				log.Fatalf("error allocating terminal\n\n")
 			}
 			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
-				panic(err)
+				log.Fatalf("%v\n\n", err)
 			}
 			tty.Close()
 			password = string(bytepw)
-			fmt.Fprintf(os.Stderr, "\n\n")
+			log.Printf("\n\n")
 		} else if password == "" {
 			password = viper.GetString("password")
 		}
@@ -99,7 +100,7 @@ Examples:
 		if keyBasedAuth {
 			file, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".ssh", "id_rsa"))
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalf("%v\n\n", err)
 			}
 
 			signer, err = ssh.ParsePrivateKey(file)
@@ -107,22 +108,22 @@ Examples:
 				if err.Error() == "ssh: this private key is passphrase protected" {
 					tty, err := os.Open("/dev/tty")
 					if err != nil {
-						log.Fatal(err, "error allocating terminal")
+						log.Fatalf("error allocating terminal: %v", err)
 					}
 					fd := int(tty.Fd())
 					fmt.Fprintf(os.Stderr, "SSH Private Key Passphrase: ")
 					passphrase, err := term.ReadPassword(fd)
 					if err != nil {
-						log.Fatal(err)
+						log.Fatalf("%v\n\n", err)
 					}
 					tty.Close()
-					fmt.Fprintf(os.Stderr, "\n\n")
+					log.Printf("\n\n")
 					signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
 					if err != nil {
-						log.Fatal(err)
+						log.Fatalf("%v\n\n", err)
 					}
 				} else {
-					log.Fatal(err)
+					log.Fatalf("%v\n\n", err)
 				}
 			}
 		}
@@ -136,10 +137,11 @@ Examples:
 
 		start := time.Now()
 
+		var errorBuffer bytes.Buffer
 		ch := make(chan sessionDetails, 100)
 		doneCh := make(chan struct{})
 
-		go printConfigSet(ch, doneCh)
+		go printConfigSet(ch, &errorBuffer, doneCh)
 
 		for _, host := range hosts {
 			wg.Add(1)
@@ -149,9 +151,12 @@ Examples:
 		close(ch)
 		<-doneCh
 
+		// Print errors
+		log.Println(errorBuffer.String())
+
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " Completed in %.3f seconds\n", elapsed.Seconds())
+		log.Printf(" Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
@@ -169,18 +174,17 @@ func init() {
 	getConfigSetCmd.Flags().StringVarP(&configFilter, "filter", "f", configFilter, "filter configuration output")
 }
 
-// printConfigSet prints the results
-func printConfigSet(ch <-chan sessionDetails, doneCh chan<- struct{}) {
-	for {
-		if session, chanIsOpen := <-ch; chanIsOpen {
+func printConfigSet(ch <-chan sessionDetails, error *bytes.Buffer, done chan<- struct{}) {
+	for session := range ch {
+		if session.error != "" {
+			error.WriteString(session.error)
+		} else {
 			green.Printf("\n*** %s ***\n\n", session.host)
 			fmt.Printf("%s\n\n", trimConfigSetOutput(session.results[cmds[2]]))
 			blue.Printf("################################################################################\n\n")
-		} else {
-			doneCh <- struct{}{}
-			return
 		}
 	}
+	done <- struct{}{} // Notify when done
 }
 
 // trimOutput removes the echoed command and the prompt from the output

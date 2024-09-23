@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -47,13 +48,14 @@ Examples:
 
     > panos-cli firewall get pingable-hosts --timeout 1000 --num-addrs 4 fw01.example.com`,
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Println()
+
 		var firewall string
 
 		// Ensure the target firewall is defined, otherwise exit and display usage
 		if len(args) != 1 {
 			cmd.Help()
-			fmt.Fprintf(os.Stderr, "\nError: No firewall specified\n")
-			os.Exit(1)
+			log.Fatalf("\nno host specified\n\n")
 		} else {
 			firewall = args[0]
 		}
@@ -72,13 +74,13 @@ Examples:
 		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
 			tty, err := os.Open("/dev/tty")
 			if err != nil {
-				log.Fatal(err, "error allocating terminal")
+				log.Fatalf("error allocating terminal: %v\n\n", err)
 			}
 			fd := int(tty.Fd())
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
-				panic(err)
+				log.Fatalf("%v\n\n", err)
 			}
 			tty.Close()
 			password = string(bytepw)
@@ -87,14 +89,18 @@ Examples:
 
 		start := time.Now()
 
-		fmt.Fprintf(os.Stderr, "Downloading ARP cache from %v ... ", firewall)
-		data := getArpCache(firewall, userFlagSet)
-
-		var arpCache addressSlice
-		err := xml.Unmarshal([]byte(data), &arpCache)
+		fmt.Printf("Downloading ARP cache from %v ... ", firewall)
+		data, err := getArpCache(firewall, userFlagSet)
 		if err != nil {
 			red.Fprintf(os.Stderr, "fail\n\n")
-			panic(err)
+			log.Fatalf("%v\n\n", err)
+		}
+
+		var arpCache addressSlice
+		err = xml.Unmarshal([]byte(data), &arpCache)
+		if err != nil {
+			red.Fprintf(os.Stderr, "fail\n\n")
+			log.Fatalf("%v\n\n", err)
 		}
 		green.Fprintf(os.Stderr, "success\n")
 
@@ -110,7 +116,12 @@ Examples:
 		// Harvest pingable addresses from each interface
 		var pingableHosts []string
 		for _, addrs := range interfaces {
-			pingableHosts = append(pingableHosts, getPingableAddresses(addrs)...)
+			pingableAddrs, err := getPingableAddresses(addrs)
+			if err != nil {
+				red.Fprintf(os.Stderr, "fail\n")
+				log.Fatalf("%v\n\n", err)
+			}
+			pingableHosts = append(pingableHosts, pingableAddrs...)
 		}
 		green.Fprintf(os.Stderr, "success\n\n")
 
@@ -127,11 +138,11 @@ Examples:
 		for _, addr := range pingableHostsSorted {
 			fmt.Println(addr)
 		}
-		fmt.Fprintln(os.Stderr)
+		log.Println()
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, " Collection complete: Discovered %d pingable addresses in %.3f seconds\n", len(pingableHosts), elapsed.Seconds())
+		log.Printf(" Collection complete: Discovered %d pingable addresses in %.3f seconds\n", len(pingableHosts), elapsed.Seconds())
 	},
 }
 
@@ -144,7 +155,7 @@ func init() {
 	getPingableHostsCmd.Flags().IntVarP(&timeout, "timeout", "t", 250, "ICMP timeout in milliseconds")
 }
 
-func getPingableAddresses(addrs []string) []string {
+func getPingableAddresses(addrs []string) ([]string, error) {
 	var pingableAddrs []string
 
 	for _, addr := range addrs {
@@ -154,7 +165,10 @@ func getPingableAddresses(addrs []string) []string {
 		}
 
 		// Ping ip addr and add to pingableAddrs if a response is received
-		stats := pingAddr(addr)
+		stats, err := pingAddr(addr)
+		if err != nil {
+			return nil, err
+		}
 
 		if stats.PacketLoss == 0 {
 			pingableAddrs = append(pingableAddrs, addr)
@@ -166,15 +180,15 @@ func getPingableAddresses(addrs []string) []string {
 		}
 	}
 
-	return pingableAddrs
+	return pingableAddrs, nil
 }
 
-func pingAddr(addr string) *ping.Statistics {
+func pingAddr(addr string) (*ping.Statistics, error) {
 	// ping ip addr
 
 	pinger, err := ping.NewPinger(addr)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	pinger.SetPrivileged(true)
@@ -183,15 +197,15 @@ func pingAddr(addr string) *ping.Statistics {
 
 	err = pinger.Run()
 	if err != nil {
-		log.Fatalf("ICMP socket operations require 'sudo'\n")
+		return nil, errors.New("\nICMP socket operations require 'sudo'")
 	}
 
 	stats := pinger.Statistics()
 
-	return stats
+	return stats, nil
 }
 
-func getArpCache(fw string, userFlagSet bool) string {
+func getArpCache(fw string, userFlagSet bool) (string, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -200,8 +214,7 @@ func getArpCache(fw string, userFlagSet bool) string {
 	url := fmt.Sprintf("https://%s/api/", fw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		return "", err
 	}
 
 	q := req.URL.Query()
@@ -219,8 +232,7 @@ func getArpCache(fw string, userFlagSet bool) string {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		return "", err
 	}
 	if resp.StatusCode != 200 {
 		red.Fprintf(os.Stderr, "fail\n\n")
@@ -231,9 +243,8 @@ func getArpCache(fw string, userFlagSet bool) string {
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		red.Fprintf(os.Stderr, "fail\n\n")
-		panic(err)
+		return "", err
 	}
 
-	return string(respBody)
+	return string(respBody), nil
 }

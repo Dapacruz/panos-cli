@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -33,12 +34,16 @@ var RootCmd = &cobra.Command{
 func Execute() {
 	err := RootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		panic(err)
 	}
 }
 
 func init() {
 	RootCmd.PersistentFlags().BoolVar(&noConfig, "no-config", false, "bypass the configuration file")
+
+	RootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		log.SetFlags(0)
+	}
 
 	// Bypass the config file if the --no-config flag is set
 	if slices.Contains(os.Args, "--no-config") {

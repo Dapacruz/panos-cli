@@ -1,6 +1,7 @@
 package globalProtect
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/xml"
@@ -36,7 +37,9 @@ type haState struct {
 }
 
 type userSlice struct {
-	Users []*conUser `xml:"result>entry"`
+	Gateway string
+	Users   []*conUser `xml:"result>entry"`
+	Error   string
 }
 
 type conUser struct {
@@ -69,18 +72,18 @@ Examples:
 
     > panos-cli global-protect get users --connected-user "*doe*"`,
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Println()
+
 		// If no gateways are set by flag or config file, exit
 		cGateways := viper.GetStringMapStringSlice("global-protect")["gateways"]
 		if len(gateways) == 0 && (len(cGateways) == 0 || (len(cGateways) == 1 && cGateways[0] == "")) {
 			cmd.Help()
-			fmt.Fprintf(os.Stderr, "\n\nNo GlobalProtect Gateways found in config file %v. Update config file or use the --gateways flag.\n", viper.ConfigFileUsed())
-			os.Exit(1)
+			log.Fatalf("\nNo GlobalProtect Gateways found in config file %v. Update config file or use the --gateways flag.\n\n", viper.ConfigFileUsed())
 		} else if len(gateways) == 0 {
 			gateways = cGateways
 		}
 
 		// If the apikey and user is not set, prompt for user
-		fmt.Fprintln(os.Stderr)
 		apikey := viper.GetString("apikey")
 		cUser := viper.GetString("user")
 		if apikey == "" && user == "" && cUser == "" {
@@ -101,23 +104,24 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Password (%s): ", user)
 			bytepw, err := term.ReadPassword(int(fd))
 			if err != nil {
-				panic(err)
+				log.Fatalf("%v\n\n", err)
 			}
 			tty.Close()
 			password = string(bytepw)
-			fmt.Fprintf(os.Stderr, "\n\n")
+			log.Printf("\n\n")
 		}
 
 		start := time.Now()
 
+		var errorBuffer bytes.Buffer
 		ch := make(chan userSlice, 100)
 		doneCh := make(chan struct{})
 
 		userCount := map[string]int{}
 		connectedUserFlagSet := cmd.Flags().Changed("connected-user")
-		go printResults(ch, doneCh, userCount, connectedUserFlagSet)
+		go printResults(ch, &errorBuffer, doneCh, userCount, connectedUserFlagSet)
 
-		fmt.Fprintf(os.Stderr, "Getting connected users ...\n\n")
+		log.Printf("Getting connected users ...\n\n")
 
 		// Get connected users
 		for _, gw := range gateways {
@@ -145,15 +149,19 @@ Examples:
 				if k == "total" {
 					continue
 				}
-				fmt.Fprintf(os.Stderr, "%v: %v\n", k, userCount[k])
+				log.Printf("%v: %v\n", k, userCount[k])
 			}
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, "Total Connected Users:", userCount["total"])
+			log.Println("\nTotal Connected Users:", userCount["total"])
+		}
+
+		// Print errors
+		if errorBuffer.String() != "" {
+			log.Printf("\n%s\n", errorBuffer.String())
 		}
 
 		// Print summary
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, "\n\n Completed in %.3f seconds\n", elapsed.Seconds())
+		log.Printf("\n\n Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
@@ -167,7 +175,7 @@ func init() {
 	getUsersCmd.Flags().BoolVarP(&stats, "stats", "s", false, "show connected user statistics")
 }
 
-func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[string]int, connectedUserFlagSet bool) {
+func printResults(ch <-chan userSlice, error *bytes.Buffer, done chan<- struct{}, userCount map[string]int, connectedUserFlagSet bool) {
 	// Print connected users
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
@@ -177,34 +185,40 @@ func printResults(ch <-chan userSlice, doneCh chan<- struct{}, userCount map[str
 
 	var connectedUsers []*conUser
 	for users := range ch {
-		for _, user := range users.Users {
-			// Print user
-			if connectedUserFlagSet {
-				if m, _ := wildcard.Match(connectedUser, user.Username); m {
+		if users.Error != "" {
+			error.WriteString(users.Error)
+		} else {
+			for _, user := range users.Users {
+				// Print user
+				if connectedUserFlagSet {
+					if m, _ := wildcard.Match(connectedUser, user.Username); m {
+						connectedUsers = append(connectedUsers, user)
+					}
+				} else {
 					connectedUsers = append(connectedUsers, user)
 				}
-			} else {
-				connectedUsers = append(connectedUsers, user)
+				userCount[user.Gateway] += 1
+				userCount["total"] += 1
 			}
-			userCount[user.Gateway] += 1
-			userCount["total"] += 1
 		}
-	}
 
-	sort.Slice(connectedUsers, func(i, j int) bool {
-		return connectedUsers[i].Username < connectedUsers[j].Username
-	})
+		sort.Slice(connectedUsers, func(i, j int) bool {
+			return connectedUsers[i].Username < connectedUsers[j].Username
+		})
 
-	for _, user := range connectedUsers {
-		tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
+		for _, user := range connectedUsers {
+			tbl.AddRow(user.Username, user.Domain, user.Computer, user.Client, user.VirtualIP, user.PublicIP, user.LoginTime, user.Gateway)
+		}
 	}
 
 	tbl.Print()
 
-	doneCh <- struct{}{}
+	done <- struct{}{}
 }
 
 func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
+	var connectedUsers userSlice
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -213,7 +227,8 @@ func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
 	url := fmt.Sprintf("https://%s/api/", gw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		panic(err)
+		connectedUsers.Error = fmt.Sprintf("%s: %v\n\n", gw, err)
+		return connectedUsers
 	}
 
 	q := req.URL.Query()
@@ -231,7 +246,8 @@ func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		connectedUsers.Error = fmt.Sprintf("%s: %v\n\n", gw, err)
+		return connectedUsers
 	}
 	if resp.StatusCode != 200 {
 		log.Fatal(resp.Status)
@@ -241,13 +257,14 @@ func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		connectedUsers.Error = fmt.Sprintf("%s: %v\n\n", gw, err)
+		return connectedUsers
 	}
 
-	var connectedUsers userSlice
 	err = xml.Unmarshal([]byte(respBody), &connectedUsers)
 	if err != nil {
-		panic(err)
+		connectedUsers.Error = fmt.Sprintf("%s: %v\n\n", gw, err)
+		return connectedUsers
 	}
 
 	for _, user := range connectedUsers.Users {
@@ -257,7 +274,7 @@ func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
 	return connectedUsers
 }
 
-func gatewayActive(gw, apikey string, userFlagSet bool) bool {
+func gatewayActive(gw, apikey string, userFlagSet bool) (bool, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -266,7 +283,7 @@ func gatewayActive(gw, apikey string, userFlagSet bool) bool {
 	url := fmt.Sprintf("https://%s/api/", gw)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 
 	q := req.URL.Query()
@@ -284,7 +301,7 @@ func gatewayActive(gw, apikey string, userFlagSet bool) bool {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	if resp.StatusCode != 200 {
 		log.Fatal(resp.Status)
@@ -294,25 +311,31 @@ func gatewayActive(gw, apikey string, userFlagSet bool) bool {
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 
 	var haState haState
 	err = xml.Unmarshal([]byte(respBody), &haState)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 
 	if haState.Enabled == "no" || haState.State == "active" {
-		return true
+		return true, nil
 	}
 
-	return false
+	return false, nil
 }
 
 func getConnectedUsers(gw, apikey string, ch chan<- userSlice, userFlagSet bool) {
 	defer wg.Done()
-	if gatewayActive(gw, apikey, userFlagSet) {
+
+	if active, err := gatewayActive(gw, apikey, userFlagSet); err != nil {
+		ch <- userSlice{
+			Gateway: gw,
+			Error:   err.Error(),
+		}
+	} else if active {
 		ch <- queryGateway(gw, apikey, userFlagSet)
 	}
 }
