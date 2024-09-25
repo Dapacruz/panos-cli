@@ -156,12 +156,14 @@ Examples:
 
 		// Print errors
 		if errorBuffer.String() != "" {
-			log.Printf("\n%s\n", errorBuffer.String())
+			red.Fprintf(os.Stderr, "\n%s\n", errorBuffer.String())
+		} else {
+			log.Printf("\n\n")
 		}
 
 		// Print summary
 		elapsed := time.Since(start)
-		log.Printf("\n\n Completed in %.3f seconds\n", elapsed.Seconds())
+		log.Printf(" Completed in %.3f seconds\n", elapsed.Seconds())
 	},
 }
 
@@ -250,7 +252,8 @@ func queryGateway(gw, apikey string, userFlagSet bool) userSlice {
 		return connectedUsers
 	}
 	if resp.StatusCode != 200 {
-		log.Fatal(resp.Status)
+		connectedUsers.Error = fmt.Sprintf("%s: %s\n\n", gw, resp.Status)
+		return connectedUsers
 	}
 
 	defer resp.Body.Close()
@@ -304,7 +307,7 @@ func gatewayActive(gw, apikey string, userFlagSet bool) (bool, error) {
 		return false, err
 	}
 	if resp.StatusCode != 200 {
-		log.Fatal(resp.Status)
+		return false, fmt.Errorf("%s: %v\n\n", gw, resp.Status)
 	}
 
 	defer resp.Body.Close()

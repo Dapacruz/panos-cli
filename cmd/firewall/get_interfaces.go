@@ -181,7 +181,7 @@ Examples:
 
 		// Print errors
 		if errorBuffer.String() != "" {
-			log.Printf("%s", errorBuffer.String())
+			red.Fprintf(os.Stderr, "%s", errorBuffer.String())
 		}
 
 		// Print summary

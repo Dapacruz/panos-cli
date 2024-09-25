@@ -123,7 +123,7 @@ Examples:
 
 		// Print errors
 		if errorBuffer.String() != "" {
-			log.Printf("\n%s\n", errorBuffer.String())
+			red.Fprintf(os.Stderr, "\n%s\n", errorBuffer.String())
 		} else {
 			log.Printf("\n\n")
 		}

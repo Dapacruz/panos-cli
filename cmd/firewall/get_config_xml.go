@@ -131,7 +131,7 @@ Examples:
 		<-doneCh
 
 		// Print errors
-		log.Println(errorBuffer.String())
+		red.Fprintln(os.Stderr, errorBuffer.String())
 
 		// Print summary
 		elapsed := time.Since(start)

@@ -41,12 +41,6 @@ var (
 	notSerialPattern  []string
 )
 
-// Create objects to colorize stdout
-var (
-	green *color.Color = color.New(color.FgGreen)
-	red   *color.Color = color.New(color.FgRed)
-)
-
 type firewallSlice struct {
 	Firewalls []fw `xml:"result>devices>entry"`
 }
