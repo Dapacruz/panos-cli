@@ -16,7 +16,7 @@ import (
 var noConfig bool
 
 const (
-	VERSION           string = "0.11.3"
+	VERSION           string = "0.11.4"
 	VIPER_CONFIG_NAME string = ".panos-cli"
 	VIPER_CONFIG_PATH string = "$HOME"
 )
