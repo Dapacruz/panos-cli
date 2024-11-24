@@ -35,10 +35,10 @@ type interfaceSlice struct {
 	Firewall        string
 	Network         []*interfaceNetwork  `xml:"result>ifnet>entry"`
 	Hardware        []*interfaceHardware `xml:"result>hw>entry"`
-	EthernetConfig  []*interfaceConfig   `xml:"result>interface>ethernet>entry"`
-	AggregateConfig []*interfaceConfig   `xml:"result>interface>aggregate-ethernet>entry"`
-	LoopbackConfig  []*interfaceConfig   `xml:"result>interface>loopback>units>entry"`
-	TunnelConfig    []*interfaceConfig   `xml:"result>interface>tunnel>units>entry"`
+	EthernetConfig  []*interfaceConfig   `xml:"result>config>devices>entry>network>interface>ethernet>entry"`
+	AggregateConfig []*interfaceConfig   `xml:"result>config>devices>entry>network>interface>aggregate-ethernet>entry"`
+	LoopbackConfig  []*interfaceConfig   `xml:"result>config>devices>entry>network>interface>loopback>units>entry"`
+	TunnelConfig    []*interfaceConfig   `xml:"result>config>devices>entry>network>interface>tunnel>units>entry"`
 	Error           string
 }
 
@@ -62,13 +62,15 @@ type interfaceHardware struct {
 }
 
 type interfaceConfig struct {
-	Name           string             `xml:"name,attr"`
-	Comment        string             `xml:"comment"`
-	MTU            string             `xml:"layer3>mtu"`
-	AggregateGroup string             `xml:"aggregate-group"`
-	IP             []*ipAddresses     `xml:"ip>entry"`
-	Layer3IP       []*ipAddresses     `xml:"layer3>ip>entry"`
-	SubInterfaces  []*interfaceConfig `xml:"layer3>units>entry"`
+	Name              string             `xml:"name,attr"`
+	Comment           string             `xml:"comment"`
+	MTU               string             `xml:"layer3>mtu"`
+	AggregateGroup    string             `xml:"aggregate-group"`
+	MgmtProfile       string             `xml:"interface-management-profile"`
+	IP                []*ipAddresses     `xml:"ip>entry"`
+	Layer3IP          []*ipAddresses     `xml:"layer3>ip>entry"`
+	SubInterfaces     []*interfaceConfig `xml:"layer3>units>entry"`
+	Layer3MgmtProfile string             `xml:"layer3>interface-management-profile"`
 }
 
 type ipAddresses struct {
@@ -93,6 +95,7 @@ type firewallInterface struct {
 	Zone           string
 	VirtualSystem  string
 	Comment        string
+	MgmtProfile    string
 }
 
 // getInterfacesCmd represents the getInterfaces command
@@ -261,9 +264,8 @@ func getInterfaces(ch chan<- interfaceSlice, fw string, userFlagSet bool) {
 
 	// Get interface configuration data
 	q = req.URL.Query()
-	q.Add("type", "config")
-	q.Add("action", "get")
-	q.Add("xpath", "/config/devices/entry[@name='localhost.localdomain']/network/interface")
+	q.Add("type", "op")
+	q.Add("cmd", "<show><config><merged></merged></config></show>")
 	if !userFlagSet && viper.GetString("apikey") != "" {
 		q.Add("key", viper.GetString("apikey"))
 	} else {
@@ -304,7 +306,7 @@ func printInterfaces(ch <-chan interfaceSlice, error *bytes.Buffer, done chan<- 
 	headerFmt := color.New(color.FgBlue, color.Underline).SprintfFunc()
 	columnFmt := color.New(color.FgHiYellow).SprintfFunc()
 
-	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Status", "State", "Virtual System", "VLAN", "Aggregate Group", "Zone", "Comment")
+	tbl := table.New("Firewall", "Name", "IP", "MTU", "Type", "MAC", "Status", "State", "Virtual System", "VLAN", "Aggregate Group", "Zone", "Management Profile", "Comment")
 	tbl.WithHeaderFormatter(headerFmt).WithFirstColumnFormatter(columnFmt)
 
 	for fw := range ch {
@@ -357,6 +359,11 @@ func printInterfaces(ch <-chan interfaceSlice, error *bytes.Buffer, done chan<- 
 				ints[i.Name].Comment = i.Comment
 				ints[i.Name].AggregateGroup = i.AggregateGroup
 				ints[i.Name].MTU = i.MTU
+				if i.MgmtProfile != "" {
+					ints[i.Name].MgmtProfile = i.MgmtProfile
+				} else {
+					ints[i.Name].MgmtProfile = i.Layer3MgmtProfile
+				}
 
 				// Parse IP addresses from merged local/Panorama configurations
 				addresses := []string{}
@@ -374,7 +381,11 @@ func printInterfaces(ch <-chan interfaceSlice, error *bytes.Buffer, done chan<- 
 						ints[si.Name] = &firewallInterface{}
 					}
 					ints[si.Name].Comment = si.Comment
-
+					if si.MgmtProfile != "" {
+						ints[si.Name].MgmtProfile = si.MgmtProfile
+					} else {
+						ints[si.Name].MgmtProfile = si.Layer3MgmtProfile
+					}
 					addresses := []string{}
 					var addrs []*ipAddresses
 					addrs = append(addrs, si.IP...)
@@ -419,7 +430,7 @@ func printInterfaces(ch <-chan interfaceSlice, error *bytes.Buffer, done chan<- 
 				case hasIpAddress && !r.MatchString(ints[k].IP):
 					continue
 				}
-				tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].AggregateGroup, ints[k].Zone, ints[k].Comment)
+				tbl.AddRow(ints[k].Firewall, ints[k].Name, ints[k].IP, ints[k].MTU, ints[k].Type, ints[k].MAC, ints[k].Status, ints[k].State, ints[k].VirtualSystem, ints[k].VLAN, ints[k].AggregateGroup, ints[k].Zone, ints[k].MgmtProfile, ints[k].Comment)
 			}
 		}
 	}
