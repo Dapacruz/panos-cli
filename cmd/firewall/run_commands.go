@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
 )
@@ -32,6 +33,8 @@ var (
 	passwordStdin bool
 	promptRE      = regexp.MustCompile(`>\s$|#\s$`)
 	signer        ssh.Signer
+	agentClient   agent.ExtendedAgent
+	agentSigners  []ssh.Signer
 	ignoreHostKey bool
 	sortOutput    bool
 	expectTimeout int
@@ -137,21 +140,36 @@ Examples:
 			signer, err = ssh.ParsePrivateKey(file)
 			if err != nil {
 				if err.Error() == "ssh: this private key is passphrase protected" {
-					tty, err := os.Open("/dev/tty")
-					if err != nil {
-						log.Fatal(err, "error allocating terminal")
+					// Check if the key was added to the ssh-agent
+					socket := os.Getenv("SSH_AUTH_SOCK")
+					if socket != "" {
+						conn, err := net.Dial("unix", socket)
+						if err != nil {
+							log.Fatalf("Failed to connect to SSH agent: %v", err)
+						}
+						defer conn.Close()
+
+						agentClient = agent.NewClient(conn)
+						agentSigners, _ = agentClient.Signers()
 					}
-					fd := int(tty.Fd())
-					fmt.Fprintf(os.Stderr, "SSH Private Key Passphrase: ")
-					passphrase, err := term.ReadPassword(fd)
-					if err != nil {
-						log.Fatal(err)
-					}
-					tty.Close()
-					log.Printf("\n\n")
-					signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
-					if err != nil {
-						log.Fatalf("%v\n\n", err)
+
+					if len(agentSigners) == 0 {
+						tty, err := os.Open("/dev/tty")
+						if err != nil {
+							log.Fatal(err, "error allocating terminal")
+						}
+						fd := int(tty.Fd())
+						fmt.Fprintf(os.Stderr, "SSH Private Key Passphrase: ")
+						passphrase, err := term.ReadPassword(fd)
+						if err != nil {
+							log.Fatal(err)
+						}
+						tty.Close()
+						log.Printf("\n\n")
+						signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
+						if err != nil {
+							log.Fatalf("%v\n\n", err)
+						}
 					}
 				} else {
 					log.Fatalf("%v\n\n", err)
@@ -216,7 +234,11 @@ func runCommands(ch chan<- sessionDetails, host string) {
 	// Set auth method
 	var authMethod ssh.AuthMethod
 	if keyBasedAuth {
-		authMethod = ssh.PublicKeys(signer)
+		if len(agentSigners) > 0 {
+			authMethod = ssh.PublicKeysCallback(agentClient.Signers)
+		} else {
+			authMethod = ssh.PublicKeys(signer)
+		}
 	} else {
 		authMethod = ssh.Password(password)
 	}

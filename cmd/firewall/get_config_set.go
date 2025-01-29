@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/term"
 )
 
@@ -106,21 +108,36 @@ Examples:
 			signer, err = ssh.ParsePrivateKey(file)
 			if err != nil {
 				if err.Error() == "ssh: this private key is passphrase protected" {
-					tty, err := os.Open("/dev/tty")
-					if err != nil {
-						log.Fatalf("error allocating terminal: %v", err)
+					// Check if the key was added to the ssh-agent
+					socket := os.Getenv("SSH_AUTH_SOCK")
+					if socket != "" {
+						conn, err := net.Dial("unix", socket)
+						if err != nil {
+							log.Fatalf("Failed to connect to SSH agent: %v", err)
+						}
+						defer conn.Close()
+
+						agentClient = agent.NewClient(conn)
+						agentSigners, _ = agentClient.Signers()
 					}
-					fd := int(tty.Fd())
-					fmt.Fprintf(os.Stderr, "SSH Private Key Passphrase: ")
-					passphrase, err := term.ReadPassword(fd)
-					if err != nil {
-						log.Fatalf("%v\n\n", err)
-					}
-					tty.Close()
-					log.Printf("\n\n")
-					signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
-					if err != nil {
-						log.Fatalf("%v\n\n", err)
+
+					if len(agentSigners) == 0 {
+						tty, err := os.Open("/dev/tty")
+						if err != nil {
+							log.Fatal(err, "error allocating terminal")
+						}
+						fd := int(tty.Fd())
+						fmt.Fprintf(os.Stderr, "SSH Private Key Passphrase: ")
+						passphrase, err := term.ReadPassword(fd)
+						if err != nil {
+							log.Fatal(err)
+						}
+						tty.Close()
+						log.Printf("\n\n")
+						signer, err = ssh.ParsePrivateKeyWithPassphrase(file, passphrase)
+						if err != nil {
+							log.Fatalf("%v\n\n", err)
+						}
 					}
 				} else {
 					log.Fatalf("%v\n\n", err)
