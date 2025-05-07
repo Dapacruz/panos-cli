@@ -127,23 +127,16 @@ Examples:
 			fmt.Fprintln(os.Stderr)
 		}
 
-		if viper.GetString("user") == "" && user == "" {
+		if viper.Get("apikey") == nil && viper.Get("user") == nil && user == "" {
 			fmt.Fprint(os.Stderr, "PAN User: ")
 			fmt.Scanln(&user)
 		} else if user == "" {
-			user = viper.GetString("user")
-		}
-
-		if viper.GetString("panorama") == "" && panorama == "" {
-			fmt.Fprint(os.Stderr, "Panorama IP/Hostname: ")
-			fmt.Scanln(&panorama)
-		} else if panorama == "" {
-			panorama = viper.GetString("panorama")
+			user = viper.Get("user").(string)
 		}
 
 		// If the user flag is set, or the password and apikey are not set, prompt for password
 		userFlagSet := cmd.Flags().Changed("user")
-		if userFlagSet || (viper.GetString("apikey") == "" && password == "") {
+		if (userFlagSet || viper.GetString("apikey") == "") && viper.GetString("password") == "" && password == "" {
 			tty, err := os.Open("/dev/tty")
 			if err != nil {
 				log.Fatal(err, "error allocating terminal")
@@ -157,6 +150,15 @@ Examples:
 			tty.Close()
 			password = string(bytepw)
 			fmt.Fprintf(os.Stderr, "\n\n")
+		} else if viper.Get("password") != nil {
+			password = viper.Get("password").(string)
+		}
+
+		if viper.GetString("panorama") == "" && panorama == "" {
+			fmt.Fprint(os.Stderr, "Panorama IP/Hostname: ")
+			fmt.Scanln(&panorama)
+		} else if viper.Get("panorama") != nil {
+			panorama = viper.Get("panorama").(string)
 		}
 
 		start := time.Now()
@@ -299,7 +301,7 @@ func getFirewalls(userFlagSet bool) string {
 	q.Add("type", "op")
 	q.Add("cmd", "<show><devices><all></all></devices></show>")
 	if !userFlagSet && viper.GetString("apikey") != "" {
-		q.Add("key", viper.GetString("apikey"))
+		q.Add("key", viper.Get("apikey").(string))
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))
@@ -347,7 +349,7 @@ func getFirewallTags(userFlagSet bool) map[string][]string {
 	q.Add("action", "get")
 	q.Add("xpath", "/config/mgt-config")
 	if !userFlagSet && viper.GetString("apikey") != "" {
-		q.Add("key", viper.GetString("apikey"))
+		q.Add("key", viper.Get("apikey").(string))
 	} else {
 		creds := fmt.Sprintf("%s:%s", user, password)
 		credsEnc := base64.StdEncoding.EncodeToString([]byte(creds))

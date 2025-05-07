@@ -53,7 +53,11 @@ func init() {
 	viper.SetConfigName(VIPER_CONFIG_NAME)
 	viper.SetConfigType("yml")
 	viper.AddConfigPath(VIPER_CONFIG_PATH)
-	// viper.AutomaticEnv()
+
+	// Environment variables (keys prefixed with 'PANOS_') will override config values
+	// (e.g., PANOS_APIKEY='r3bz7v*vAskTukT8lY1A8wzvs')
+	viper.SetEnvPrefix("panos")
+	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
